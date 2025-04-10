@@ -35,6 +35,8 @@ interface Block {
   id: string;
   type: BlockType;
   config: BlockConfig;
+  outputName?: string; // 💡 nom de sortie (step1, step2...)
+  input?: string; // 💡 nom du bloc d’entrée (step1, input, etc.)
 }
 
 // Fonction pour extraire tous les champs, y compris les champs imbriqués
@@ -194,6 +196,8 @@ interface SortableBlockProps {
   allFields: string[];
   inputData: any[] | null;
   isDraggingThis?: boolean;
+  availableInputs: string[];
+  inputFileName: string | null;
 }
 
 function SortableBlock({
@@ -203,6 +207,8 @@ function SortableBlock({
   allFields,
   inputData,
   isDraggingThis,
+  availableInputs,
+  inputFileName,
 }: SortableBlockProps) {
   const {
     attributes,
@@ -306,7 +312,8 @@ function SortableBlock({
       });
     }
   };
-
+  const isDuplicateName =
+    !!block.outputName && availableInputs.includes(block.outputName.trim());
   return (
     <div
       ref={(el) => {
@@ -317,6 +324,67 @@ function SortableBlock({
       {...attributes}
       className={isDragging ? "block-dragging" : ""}
     >
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "row",
+          alignItems: "center",
+          gap: "16px",
+          marginBottom: "8px",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <label style={{ minWidth: "40px" }}>Nom :</label>
+          <input
+            type="text"
+            value={block.outputName || ""}
+            onChange={(e) => onChange({ ...block, outputName: e.target.value })}
+            placeholder="ex: step1"
+            style={{
+              border: "1px solid",
+              borderColor: isDuplicateName ? "red" : "#ccc",
+              minWidth: "120px",
+            }}
+          />
+        </div>
+
+        {block.type !== "convert" && (
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <label style={{ minWidth: "55px" }}>Entrée :</label>
+            <select
+              value={block.input || ""}
+              onChange={(e) => onChange({ ...block, input: e.target.value })}
+              style={{
+                border: "1px solid #ccc",
+                minWidth: "120px",
+                alignItems: "center",
+              }}
+            >
+              {availableInputs.map((stepName) => (
+                <option key={stepName} value={stepName}>
+                  {stepName === "raw_data" && inputFileName
+                    ? ` ${inputFileName}`
+                    : stepName}
+                </option>
+              ))}
+            </select>
+            {block.input === "raw_data" && inputFileName && (
+              <span
+                style={{  
+                  backgroundColor: "#e2fbe9",
+                  padding: "2px 6px",
+                  fontSize: "12px",
+                  borderRadius: "4px",
+                  marginLeft: "4px",
+                  color: "#065f46",
+                }}
+              >
+                🌱 Données d'entrée
+              </span>
+            )}
+          </div>
+        )}
+      </div>
       <div
         {...listeners}
         style={{
@@ -341,6 +409,7 @@ function SortableBlock({
         className="text-red-500 text-sm"
         style={{
           position: "absolute",
+          background: "white",
           top: "13px",
           right: "8px",
           border: "none",
@@ -497,7 +566,7 @@ function SortableBlock({
                     display: "flex",
                     flexDirection: "row",
                     flexWrap: "wrap",
-                    gap: "32px",
+                    gap: "8px 32px",
                     alignItems: "flex-end",
                     overflowX: "auto",
                   }}
@@ -809,129 +878,133 @@ function transformValue(
 }
 
 function applyPipeline(data: any[], blocks: Block[]) {
-  const processedData = blocks.reduce((currentData, block) => {
-    switch (block.type) {
-      case "filter": {
-        const { field, operator, value } = block.config;
-        if (!field || !operator || value === undefined) return currentData;
-        return currentData.filter((item) => {
-          const itemVal = getNestedValue(item, field);
-          const parsedVal = isNaN(Number(value)) ? value : Number(value);
-          const parsedItemVal = isNaN(Number(itemVal))
-            ? itemVal
-            : Number(itemVal);
+  const context: Record<string, any> = {
+    input: data,
+    raw_data: data,
+  };
 
-          switch (operator) {
-            case ">":
-              return parsedItemVal > parsedVal;
-            case "<":
-              return parsedItemVal < parsedVal;
-            case "==":
-              return parsedItemVal === parsedVal;
-            case "!=":
-              return parsedItemVal !== parsedVal;
-            case ">=":
-              return parsedItemVal >= parsedVal;
-            case "<=":
-              return parsedItemVal <= parsedVal;
-            default:
-              return true;
-          }
-        });
-      }
-      case "map": {
-        const {
-          field,
-          newField,
-          transform,
-          transformOption,
-          keepNestedStructure,
-        } = block.config;
-        if (!field || !newField) return currentData;
+  for (const block of blocks) {
+    const inputKey = block.input || "input";
+    const inputData = context[inputKey];
 
-        return currentData.map((item) => {
-          // Récupère la valeur du champ source
-          const originalValue = getNestedValue(item, field);
-
-          // Applique la transformation si elle est définie
-          const transformedValue = transformValue(
-            originalValue,
-            transform,
-            transformOption
-          );
-
-          // Clone l'objet pour éviter de modifier l'original
-          const result = { ...item };
-
-          // Si l'option "maintenir la structure imbriquée" est activée
-          if (keepNestedStructure) {
-            // Détermine le chemin d'imbrication
-            const pathParts = field.split(".");
-
-            // Si le champ n'est pas imbriqué, ajoute simplement le nouveau champ à la racine
-            if (pathParts.length <= 1) {
-              result[newField] = transformedValue;
-            } else {
-              // Obtient le parent (l'objet contenant le champ source)
-              const parentPath = pathParts.slice(0, -1).join(".");
-              const parentObj = getNestedValue(result, parentPath);
-
-              // Si le parent existe, ajoute le nouveau champ à cet objet
-              if (parentObj && typeof parentObj === "object") {
-                // Crée une copie pour éviter la modification par référence
-                const newParent = { ...parentObj };
-                newParent[newField] = transformedValue;
-
-                // Met à jour l'objet parent dans le résultat
-                setNestedValue(result, parentPath, newParent);
-              } else {
-                // Si le parent n'existe pas, revient au comportement par défaut
-                result[newField] = transformedValue;
-              }
-            }
-          } else {
-            // Comportement par défaut: ajoute simplement le nouveau champ à la racine
-            result[newField] = transformedValue;
-          }
-
-          return result;
-        });
-      }
-      case "convert": {
-        const { format } = block.config;
-        if (format === "csv") {
-          if (currentData.length === 0) return currentData;
-          const keys = Object.keys(currentData[0] || {});
-          const rows = currentData.map((obj) =>
-            keys.map((k) => obj[k]).join(",")
-          );
-          return [keys.join(","), ...rows];
-        }
-        return currentData;
-      }
-
-      case "sort": {
-        const { field, operator } = block.config;
-        if (!field || !operator) return currentData;
-        return [...currentData].sort((a, b) => {
-          const aVal = getNestedValue(a, field);
-          const bVal = getNestedValue(b, field);
-
-          if (typeof aVal === "number" && typeof bVal === "number") {
-            return operator === "asc" ? aVal - bVal : bVal - aVal;
-          } else {
-            return operator === "asc"
-              ? String(aVal).localeCompare(String(bVal))
-              : String(bVal).localeCompare(String(aVal));
-          }
-        });
-      }
-      default:
-        return currentData;
+    if (!inputData) {
+      console.warn(
+        `Entrée "${inputKey}" introuvable pour le bloc "${block.outputName}"`
+      );
+      continue;
     }
-  }, data);
 
-  return processedData;
+    const result = applyBlockLogic(inputData, block);
+
+    if (block.outputName) {
+      context[block.outputName] = result;
+    }
+  }
+
+  const lastOutput = blocks[blocks.length - 1]?.outputName || "input";
+  return context[lastOutput];
+}
+
+function applyBlockLogic(data: any[], block: Block): any[] | string[] {
+  switch (block.type) {
+    case "filter": {
+      const { field, operator, value } = block.config;
+      if (!field || !operator || value === undefined) return data;
+      return data.filter((item) => {
+        const itemVal = getNestedValue(item, field);
+        const parsedVal = isNaN(Number(value)) ? value : Number(value);
+        const parsedItemVal =
+          typeof itemVal === "string" && !isNaN(Number(itemVal))
+            ? Number(itemVal)
+            : itemVal;
+
+        switch (operator) {
+          case ">":
+            return parsedItemVal > parsedVal;
+          case "<":
+            return parsedItemVal < parsedVal;
+          case "==":
+            return parsedItemVal === parsedVal;
+          case "!=":
+            return parsedItemVal !== parsedVal;
+          case ">=":
+            return parsedItemVal >= parsedVal;
+          case "<=":
+            return parsedItemVal <= parsedVal;
+          default:
+            return true;
+        }
+      });
+    }
+    case "map": {
+      const {
+        field,
+        newField,
+        transform,
+        transformOption,
+        keepNestedStructure,
+      } = block.config;
+
+      if (!field) return data;
+
+      return data.map((item) => {
+        const originalValue = getNestedValue(item, field);
+        const transformedValue = transformValue(
+          originalValue,
+          transform,
+          transformOption
+        );
+
+        const result = JSON.parse(JSON.stringify(item));
+
+        const fieldPathParts = field.split(".");
+        const target = newField?.trim() || fieldPathParts.at(-1)!;
+
+        // 🧠 Si on garde la structure et c'est un champ imbriqué : recompose le chemin
+        let targetFieldPath: string;
+        if (keepNestedStructure && fieldPathParts.length > 1) {
+          const parentPath = fieldPathParts.slice(0, -1).join(".");
+          targetFieldPath = `${parentPath}.${target}`;
+        } else {
+          targetFieldPath = newField?.trim() || field;
+        }
+
+        setNestedValue(result, targetFieldPath, transformedValue);
+        return result;
+      });
+    }
+
+    case "convert": {
+      const { format } = block.config;
+      if (format === "csv") {
+        if (data.length === 0) return data;
+        const keys = Object.keys(data[0] || {});
+        const rows = data.map((obj) => keys.map((k) => obj[k]).join(","));
+        return [keys.join(","), ...rows];
+      }
+      return data;
+    }
+
+    case "sort": {
+      const { field, operator } = block.config;
+      if (!field || !operator) return data;
+      return [...data].sort((a, b) => {
+        const aVal = getNestedValue(a, field);
+        const bVal = getNestedValue(b, field);
+
+        if (typeof aVal === "number" && typeof bVal === "number") {
+          return operator === "asc" ? aVal - bVal : bVal - aVal;
+        } else {
+          return operator === "asc"
+            ? String(aVal).localeCompare(String(bVal))
+            : String(bVal).localeCompare(String(aVal));
+        }
+      });
+    }
+
+    default:
+      return data;
+  }
 }
 
 // Fonction pour définir une valeur dans un objet imbriqué
@@ -965,6 +1038,7 @@ function BlockEditor() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [inputFileName, setInputFileName] = useState<string | null>(null);
 
   useEffect(() => {
     if (inputData && inputData.length > 0) {
@@ -1014,7 +1088,19 @@ function BlockEditor() {
   }, []);
 
   const addBlock = (type: BlockType) => {
-    setBlocks([...blocks, { id: uuidv4(), type, config: {} }]);
+    const nextStepNumber = blocks.length + 1;
+    const newOutputName = `step${nextStepNumber}`;
+    const previousOutput = blocks.at(-1)?.outputName || "raw_data";
+    setBlocks([
+      ...blocks,
+      {
+        id: uuidv4(),
+        type,
+        config: {},
+        outputName: newOutputName,
+        input: previousOutput,
+      },
+    ]);
   };
 
   const handleDragStart = (event: DragStartEvent) => {
@@ -1037,7 +1123,23 @@ function BlockEditor() {
   };
 
   const handleBlockChange = (updatedBlock: Block) => {
-    setBlocks(blocks.map((b) => (b.id === updatedBlock.id ? updatedBlock : b)));
+    setBlocks((prevBlocks) =>
+      prevBlocks.map((b) => {
+        if (b.id === updatedBlock.id) return updatedBlock;
+
+        const oldBlock = prevBlocks.find((b) => b.id === updatedBlock.id);
+        const oldOutputName = oldBlock?.outputName;
+
+        if (oldOutputName && b.input === oldOutputName) {
+          return {
+            ...b,
+            input: updatedBlock.outputName || "",
+          };
+        }
+
+        return b;
+      })
+    );
   };
 
   const handleBlockDelete = (id: string) => {
@@ -1060,6 +1162,7 @@ function BlockEditor() {
           setInputData(data);
           setOutputData(data);
           setAllFields(extractAllFields(data));
+          setInputFileName(file.name);
         } else if (file.name.endsWith(".csv")) {
           const [headerLine, ...lines] = content
             .split(/\r?\n/)
@@ -1075,6 +1178,7 @@ function BlockEditor() {
           setInputData(data);
           setOutputData(data);
           setAllFields(extractAllFields(data));
+          setInputFileName(file.name);
         }
       } catch (err) {
         alert("Erreur de lecture du fichier");
@@ -1102,6 +1206,20 @@ function BlockEditor() {
       setIsLoading(false);
     }
   };
+
+  const intermediateOutputs: Record<string, any[]> = {
+    input: inputData,
+  };
+
+  intermediateOutputs["raw_data"] = inputData;
+
+  blocks.forEach((block) => {
+    const input = intermediateOutputs[block.input || "input"];
+    const output = applyBlockLogic(input || [], block);
+    if (block.outputName) {
+      intermediateOutputs[block.outputName] = output;
+    }
+  });
 
   return (
     <div className="p-4 w-full max-w-[1400px] mx-auto">
@@ -1165,17 +1283,34 @@ function BlockEditor() {
           items={blocks.map((b) => b.id)}
           strategy={verticalListSortingStrategy}
         >
-          {blocks.map((block) => (
-            <SortableBlock
-              key={block.id}
-              block={block}
-              onChange={handleBlockChange}
-              onDelete={handleBlockDelete}
-              allFields={allFields}
-              inputData={inputData}
-              isDraggingThis={activeId === block.id}
-            />
-          ))}
+          {blocks.map((block, index) => {
+            const availableInputs = [
+              "raw_data",
+              ...blocks
+                .slice(0, index)
+                .map((b) => b.outputName)
+                .filter((name): name is string => !!name),
+            ];
+            const inputForCurrentBlock =
+              intermediateOutputs[block.input || "raw_data"];
+            const availableFields = extractAllFields(
+              inputForCurrentBlock || []
+            );
+
+            return (
+              <SortableBlock
+                key={block.id}
+                block={block}
+                onChange={handleBlockChange}
+                onDelete={handleBlockDelete}
+                allFields={availableFields}
+                inputData={inputForCurrentBlock}
+                isDraggingThis={activeId === block.id}
+                availableInputs={availableInputs} // 🆕
+                inputFileName={inputFileName}
+              />
+            );
+          })}
         </SortableContext>
 
         <DragOverlay>
