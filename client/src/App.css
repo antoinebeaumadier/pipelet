@@ -1,5 +1,6 @@
 .App {
   text-align: center;
+  padding: 30px;
 }
 
 .App-logo {
@@ -35,4 +36,23 @@
   to {
     transform: rotate(360deg);
   }
+}
+
+/* Ajoutez ceci à votre fichier CSS */
+.block-map-container > div {
+  width: 140px !important;
+  min-width: unset !important;
+  flex: none !important;
+}
+
+.field-selector-container {
+  width: 140px !important;
+  min-width: unset !important;
+  flex: none !important;
+}
+
+.field-selector-container select {
+  width: 100% !important;
+  min-width: unset !important;
+  flex: none !important;
 }
