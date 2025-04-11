@@ -22,7 +22,7 @@ import InputBlock from "./InputBlock";
 import SortableBlock from "./SortableBlock";
 
 // Import utilities
-import { extractAllFields, parseCSV } from "../../utils/dataUtils";
+import { extractAllFields, parseCSV, parseXML } from "../../utils/dataUtils";
 import { applyPipeline } from "../../utils/pipeline";
 
 const BlockEditor: React.FC = () => {
@@ -85,7 +85,14 @@ const BlockEditor: React.FC = () => {
 
   // Add a new block to the pipeline
   const addBlock = (type: BlockType) => {
-    const nextStepNumber = blocks.length + 1;
+    // Find the first available step number
+    const usedStepNumbers = blocks.map(block => {
+      const match = block.outputName?.match(/step(\d+)/);
+      return match ? parseInt(match[1]) : 0;
+    });
+    const nextStepNumber = usedStepNumbers.length > 0 
+      ? Math.max(...usedStepNumbers) + 1 
+      : 1;
     const newOutputName = `step${nextStepNumber}`;
     const previousOutput = blocks.at(-1)?.outputName || "raw_data";
     setBlocks([
@@ -96,6 +103,7 @@ const BlockEditor: React.FC = () => {
         config: {},
         outputName: newOutputName,
         input: previousOutput,
+        enabled: true, // Make new blocks enabled by default
       },
     ]);
   };
@@ -249,6 +257,12 @@ const BlockEditor: React.FC = () => {
           setOutputData(data);
           setAllFields(extractAllFields(data));
           setInputFileName(file.name);
+        } else if (file.name.endsWith(".xml")) {
+          const data = parseXML(content);
+          setInputData(data);
+          setOutputData(data);
+          setAllFields(extractAllFields(data));
+          setInputFileName(file.name);
         }
       } catch (err) {
         alert("Error reading file");
@@ -281,6 +295,57 @@ const BlockEditor: React.FC = () => {
     }
   }, [blocks, inputData, calculateIntermediateOutputs]);
 
+  const getBlockInputData = (block: Block) => {
+    if (block.input === "raw_data") {
+      return inputData;
+    }
+    return intermediateOutputs[block.input || ""] || null;
+  };
+
+  const getBlockOutput = (block: Block) => {
+    return intermediateOutputs[block.outputName || ""] || null;
+  };
+
+  const getBlockContext = (block: Block) => {
+    const context: Record<string, any[]> = {
+      raw_data: inputData || [],
+    };
+
+    blocks.forEach((b) => {
+      if (b.outputName) {
+        context[b.outputName] = intermediateOutputs[b.outputName] || [];
+      }
+    });
+
+    return context;
+  };
+
+  const renderBlock = (block: Block, index: number) => {
+    const availableInputs = [
+      "raw_data",
+      ...blocks
+        .slice(0, index)
+        .map((b) => b.outputName)
+        .filter((name): name is string => name !== undefined),
+    ];
+
+    return (
+      <SortableBlock
+        key={block.id}
+        block={block}
+        onChange={handleBlockChange}
+        onDelete={(b) => handleBlockDelete(b.id)}
+        allFields={allFields}
+        inputData={getBlockInputData(block)}
+        isDraggingThis={activeId === block.id}
+        availableInputs={availableInputs}
+        inputFileName={inputFileName}
+        blockOutput={getBlockOutput(block)}
+        context={getBlockContext(block)}
+      />
+    );
+  };
+
   return (
     <div>
       {/* Fixed header panel */}
@@ -292,19 +357,19 @@ const BlockEditor: React.FC = () => {
           backgroundColor: "white",
           borderBottom: "1px solid #e5e7eb",
           margin: "-8px 0px 8px 0px",
-          padding: "0px 0px 0px 0px",
-          height: "140px"
+          padding: "0px 0px 8px 0px",
+          height: "120px"
         }}
       >
         <h1>🧱 Pipeline Editor</h1>
 
         <div>
           <label>
-            📂 Load a CSV or JSON file
+            📂 Load a CSV, JSON, or XML file
           </label>
           <input
             type="file"
-            accept=".json,.csv"
+            accept=".json,.csv,.xml"
             onChange={handleFileUpload}
             className="block"
             disabled={isLoading || isDragging}
@@ -325,7 +390,7 @@ const BlockEditor: React.FC = () => {
           <div
             style={{
               width: "70%",
-              maxHeight: "calc(97vh - 200px)",
+              maxHeight: "calc(97vh - 195px)",
               overflowY: "auto",
               paddingRight: "8px",
             }}
@@ -364,7 +429,7 @@ const BlockEditor: React.FC = () => {
                     ...blocks
                       .slice(0, index)
                       .map((b) => b.outputName)
-                      .filter((name): name is string => !!name),
+                      .filter((name): name is string => name !== undefined),
                   ];
                   const inputForCurrentBlock =
                     intermediateOutputs[block.input || "raw_data"];
@@ -372,20 +437,7 @@ const BlockEditor: React.FC = () => {
                     inputForCurrentBlock || []
                   );
 
-                  return (
-                    <SortableBlock
-                      key={block.id}
-                      block={block}
-                      onChange={handleBlockChange}
-                      onDelete={handleBlockDelete}
-                      allFields={availableFields}
-                      inputData={inputForCurrentBlock}
-                      isDraggingThis={activeId === block.id}
-                      availableInputs={availableInputs}
-                      inputFileName={inputFileName}
-                      blockOutput={intermediateOutputs[block.outputName || ""]}
-                    />
-                  );
+                  return renderBlock(block, index);
                 })}
               </SortableContext>
 
@@ -428,11 +480,11 @@ const BlockEditor: React.FC = () => {
             style={{
               width: "30%",
               backgroundColor: "#f9f9f9",
-              padding: "16px",
+              padding: "8px",
               borderRadius: "8px",
               position: "sticky",
-              top: "calc(16px + 250px)", /* Adjustment for header */
-              height: "calc(97vh - 250px)", /* Fixed height */
+              top: "calc(16px + 100px)", /* Adjustment for header */
+              height: "calc(97vh - 210px)", /* Fixed height */
               display: "flex",
               flexDirection: "column",
               overflow: "hidden", /* Prevent internal scrolling */

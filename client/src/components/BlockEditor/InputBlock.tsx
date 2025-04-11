@@ -12,7 +12,7 @@ const InputBlock: React.FC<InputBlockProps> = ({ inputData, fileName }) => {
         borderRadius: "8px",
         padding: "16px",
         marginBottom: "8px",
-        marginTop: "16px",
+        marginTop: "0px",
         backgroundColor: "#f0f9ff",
       }}
     >

@@ -1,6 +1,13 @@
 // Define block types
-export const BLOCK_TYPES = ["filter", "map", "convert", "sort", "merge", "format"] as const;
+export const BLOCK_TYPES = ["filter", "map", "convert", "sort", "merge", "format", "aggregate", "structure", "get", "reverse", "pick", "mapObject", "mapKeys", "mapValues", "createObject"] as const;
 export type BlockType = (typeof BLOCK_TYPES)[number];
+
+export interface ObjectTemplateItem {
+  key: string;
+  value: string;
+  isNested?: boolean;
+  children?: ObjectTemplateItem[];
+}
 
 // Configuration for different block types
 export interface BlockConfig {
@@ -14,8 +21,36 @@ export interface BlockConfig {
   keepNestedStructure?: boolean;
   mergeWith?: string;
   mergeStrategy?: "override" | "combine" | "append";
+  joinType?: "inner" | "left" | "right" | "full";
+  leftKey?: string;
+  rightKey?: string;
   template?: string;
   keepOriginal?: boolean;
+  // Aggregate block specific config
+  groupBy?: string[];
+  aggregateFields?: {
+    field: string;
+    operation: "sum" | "average" | "count" | "min" | "max";
+    newField: string;
+  }[];
+  condition?: string;
+  typeCheck?: string;
+  // Structure block specific config
+  operation?: "flatten" | "unflatten" | "restructure";
+  separator?: string;
+  // Get block specific config
+  path?: string;
+  // Pick block specific config
+  properties?: string[];
+  // MapObject block specific config
+  keyTransform?: string;
+  valueTransform?: string;
+  // MapKeys block specific config
+  keyCallback?: string;
+  // MapValues block specific config
+  valueCallback?: string;
+  // CreateObject block specific config
+  objectTemplate?: ObjectTemplateItem[];
 }
 
 // Block structure
@@ -26,6 +61,7 @@ export interface Block {
   outputName?: string;
   input?: string;
   hasError?: boolean;
+  enabled?: boolean;
 }
 
 // Props for components
@@ -54,11 +90,12 @@ export interface InputBlockProps {
 export interface SortableBlockProps {
   block: Block;
   onChange: (block: Block) => void;
-  onDelete: (id: string) => void;
+  onDelete: (block: Block) => void;
   allFields: string[];
   inputData: any[] | null;
-  isDraggingThis?: boolean;
+  isDraggingThis: boolean;
   availableInputs: string[];
   inputFileName: string | null;
   blockOutput: any[] | null;
+  context?: Record<string, any[]>;
 }

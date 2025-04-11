@@ -6,44 +6,46 @@ interface ConvertBlockProps {
   onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => void;
 }
 
-const ConvertBlock: React.FC<ConvertBlockProps> = ({ 
-  block, 
-  onChange 
-}) => {
+const ConvertBlock: React.FC<ConvertBlockProps> = ({ block, onChange }) => {
+  const handleFormatChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    onChange({
+      target: {
+        name: 'format',
+        value: e.target.value,
+      },
+    } as any);
+  };
+
   return (
     <div
       style={{
         display: "flex",
         flexDirection: "row",
-        flexWrap: "wrap",
-        gap: "32px",
-        alignItems: "flex-end",
-        overflowX: "auto",
+        flexWrap: "nowrap",
+        gap: "8px",
+        alignItems: "center",
       }}
     >
-      <div
+      <label style={{ fontSize: "12px" }}>
+        Format:
+      </label>
+      <select
+        name="format"
+        value={block.config.format || ""}
+        onChange={handleFormatChange}
         style={{
-          display: "flex",
-          flexDirection: "row",
-          flexWrap: "nowrap",
-          gap: "16px 16px",
-          padding: "0px 0px",
-          alignItems: "flex-end",
+          width: "100px",
+          minWidth: "100px",
+          height: "20px",
+          padding: "0px 8px",
+          fontSize: "12px",
         }}
       >
-        <label>
-          Output format
-        </label>
-        <select
-          name="format"
-          value={block.config.format || ""}
-          onChange={onChange}
-        >
-          <option value="">Choose a format</option>
-          <option value="csv">CSV</option>
-          <option value="json">JSON</option>
-        </select>
-      </div>
+        <option value="">Choose</option>
+        <option value="csv">CSV</option>
+        <option value="json">JSON</option>
+        <option value="xml">XML</option>
+      </select>
     </div>
   );
 };

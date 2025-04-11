@@ -1,66 +1,49 @@
-import React, { useState, useEffect } from 'react';
-import { FieldSelectorProps } from '../BlockEditor/types';
-import { getNestedFields } from '../../utils/dataUtils';
+import React from "react";
+
+interface FieldSelectorProps {
+  value?: string;
+  onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
+  fields?: string[];
+  placeholder?: string;
+  style?: React.CSSProperties;
+  allFields?: string[];
+  currentValue?: string;
+  name?: string;
+  inputData?: any[] | null;
+  className?: string;
+}
 
 const FieldSelector: React.FC<FieldSelectorProps> = ({
+  value,
+  onChange,
+  fields,
+  placeholder = "Select a field",
+  style,
   allFields,
   currentValue,
-  onChange,
   name,
-  placeholder,
   inputData,
-  className = "",
+  className,
 }) => {
-  const [showNestedFields, setShowNestedFields] = useState<boolean>(false);
-  const [nestedFields, setNestedFields] = useState<string[]>([]);
-
-  useEffect(() => {
-    if (inputData && currentValue) {
-      const nested = getNestedFields(inputData, currentValue);
-      setNestedFields(nested);
-      setShowNestedFields(nested.length > 0);
-    } else {
-      setShowNestedFields(false);
-    }
-  }, [currentValue, inputData]);
+  const selectedValue = value ?? currentValue ?? "";
+  const availableFields = fields ?? allFields ?? [];
+  const selectName = name ?? "";
 
   return (
-    <div className={className}>
+    <div style={{ position: "relative" }}>
       <select
-        name={name}
-        value={currentValue || ""}
-        onChange={(e) => {
-          onChange(e);
-          // If we have nested fields, show the nested field selector
-          if (inputData) {
-            const nested = getNestedFields(inputData, e.target.value);
-            setNestedFields(nested);
-            setShowNestedFields(nested.length > 0);
-          }
-        }}
+        name={selectName}
+        value={selectedValue}
+        onChange={onChange}
+        className={`${className} square-select`}
       >
         <option value="">{placeholder}</option>
-        {allFields.map((field) => (
+        {availableFields.map((field) => (
           <option key={field} value={field}>
             {field}
           </option>
         ))}
       </select>
-
-      {showNestedFields && nestedFields.length > 0 && (
-        <select
-          name={name}
-          value={currentValue}
-          onChange={onChange}
-        >
-          <option value="">Select nested field (optional)</option>
-          {nestedFields.map((field) => (
-            <option key={field} value={field}>
-              {field.replace(`${currentValue}.`, "")}
-            </option>
-          ))}
-        </select>
-      )}
     </div>
   );
 };

@@ -8,7 +8,16 @@ import SortBlock from "./blocks/SortBlock";
 import MergeBlock from "./blocks/MergeBlock";
 import ConvertBlock from "./blocks/ConvertBlock";
 import FormatBlock from "./blocks/FormatBlock";
+import AggregateBlock from "./blocks/AggregateBlock";
+import StructureBlock from "./blocks/StructureBlock";
+import GetBlock from "./blocks/GetBlock";
+import ReverseBlock from "./blocks/ReverseBlock";
+import PickBlock from "./blocks/PickBlock";
+import MapObjectBlock from "./blocks/MapObjectBlock";
 import BlockPreview from "./BlockPreview";
+import MapKeysBlock from "./blocks/MapKeysBlock";
+import MapValuesBlock from "./blocks/MapValuesBlock";
+import CreateObjectBlock from "./blocks/CreateObjectBlock";
 
 // This would normally import all block type components
 // import MapBlock from './blocks/MapBlock';
@@ -26,6 +35,7 @@ const SortableBlock: React.FC<SortableBlockProps> = ({
   availableInputs,
   inputFileName,
   blockOutput,
+  context,
 }) => {
   const {
     attributes,
@@ -82,7 +92,7 @@ const SortableBlock: React.FC<SortableBlockProps> = ({
     borderRadius: "8px",
     padding: "8px",
     marginBottom: "8px",
-    backgroundColor: block.hasError ? "#fff8f8" : "white",
+    backgroundColor: block.hasError ? "#fff8f8" : block.enabled === false ? "#f9fafb" : "white",
     position: "relative" as const,
     width: "100%",
     maxWidth: "100%",
@@ -90,6 +100,7 @@ const SortableBlock: React.FC<SortableBlockProps> = ({
     zIndex: isDragging ? 10 : 1,
     boxShadow: isDragging ? "0 5px 10px rgba(0,0,0,0.15)" : "none",
     willChange: "transform",
+    opacity: block.enabled === false ? 0.7 : 1,
   };
 
   // Special rendering if the block is being moved
@@ -110,25 +121,31 @@ const SortableBlock: React.FC<SortableBlockProps> = ({
   }
 
   const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement> | Block
   ) => {
-    if (e.target.type === "checkbox") {
-      const target = e.target as HTMLInputElement;
-      onChange({
-        ...block,
-        config: {
-          ...block.config,
-          [target.name]: target.checked,
-        },
-      });
+    if ('target' in e) {
+      // Handle event-based changes
+      if (e.target.type === "checkbox") {
+        const target = e.target as HTMLInputElement;
+        onChange({
+          ...block,
+          config: {
+            ...block.config,
+            [target.name]: target.checked,
+          },
+        });
+      } else {
+        onChange({
+          ...block,
+          config: {
+            ...block.config,
+            [e.target.name]: e.target.value,
+          },
+        });
+      }
     } else {
-      onChange({
-        ...block,
-        config: {
-          ...block.config,
-          [e.target.name]: e.target.value,
-        },
-      });
+      // Handle direct block updates
+      onChange(e);
     }
   };
 
@@ -159,29 +176,29 @@ const SortableBlock: React.FC<SortableBlockProps> = ({
         return (
           <MapBlock
             block={block}
-            onChange={handleChange}
             allFields={allFields}
             inputData={inputData}
+            onChange={handleChange}
           />
         );
       case "sort":
         return (
           <SortBlock
             block={block}
-            onChange={handleChange}
             allFields={allFields}
             inputData={inputData}
+            onChange={handleChange}
           />
         );
-        case "format":
-          return (
-            <FormatBlock
-              block={block}
-              onChange={handleChange}
-              allFields={allFields}
-              inputData={inputData}
-            />
-          );
+      case "format":
+        return (
+          <FormatBlock
+            block={block}
+            allFields={allFields}
+            inputData={inputData}
+            onChange={handleChange}
+          />
+        );
       case "merge":
         return (
           <MergeBlock
@@ -189,12 +206,86 @@ const SortableBlock: React.FC<SortableBlockProps> = ({
             onChange={handleChange}
             availableInputs={availableInputs}
             inputFileName={inputFileName}
+            allFields={allFields}
+            inputData={inputData}
+            mergeData={block.config.mergeWith ? (context?.[block.config.mergeWith] || null) : null}
           />
         );
       case "convert":
         return <ConvertBlock block={block} onChange={handleChange} />;
+      case "aggregate":
+        return (
+          <AggregateBlock
+            block={block}
+            allFields={allFields}
+            inputData={inputData}
+            onChange={handleChange}
+          />
+        );
+      case "structure":
+        return (
+          <StructureBlock
+            block={block}
+            onChange={handleChange}
+          />
+        );
+      case "mapKeys":
+        return (
+          <MapKeysBlock
+            block={block}
+            onChange={handleChange}
+          />
+        );
+      case "mapValues":
+        return (
+          <MapValuesBlock
+            block={block}
+            onChange={handleChange}
+          />
+        );
+      case "get":
+        return (
+          <GetBlock
+            block={block}
+            onChange={handleChange}
+            allFields={allFields}
+            inputData={inputData}
+          />
+        );
+      case "reverse":
+        return (
+          <ReverseBlock
+            block={block}
+            onChange={handleChange}
+          />
+        );
+      case "pick":
+        return (
+          <PickBlock
+            block={block}
+            onChange={handleChange}
+            allFields={allFields}
+            inputData={inputData}
+          />
+        );
+      case "mapObject":
+        return (
+          <MapObjectBlock
+            block={block}
+            onChange={handleChange}
+            allFields={allFields}
+            inputData={inputData}
+          />
+        );
+      case "createObject":
+        return (
+          <CreateObjectBlock
+            block={block}
+            onChange={handleChange}
+          />
+        );
       default:
-        return <div>Configuration for {block.type} block</div>;
+        return null;
     }
   };
   
@@ -218,8 +309,8 @@ const SortableBlock: React.FC<SortableBlockProps> = ({
           marginBottom: "8px",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <label style={{ minWidth: "40px" }}>Name:</label>
+        <div style={{ display: "flex", alignItems: "center", gap: "0px" }}>
+          <label style={{ minWidth: "40px", fontSize: "12px" }}>Name:</label>
           <input
             type="text"
             value={block.outputName || ""}
@@ -229,21 +320,27 @@ const SortableBlock: React.FC<SortableBlockProps> = ({
               border: "1px solid",
               borderColor: isDuplicateName ? "red" : "#ccc",
               minWidth: "120px",
+              height: "20px",
+              padding: "0px 8px",
+              fontSize: "12px",
             }}
           />
         </div>
 
         {block.type !== "convert" && (
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <label style={{ minWidth: "55px" }}>Input:</label>
+            <label style={{ minWidth: "20px", fontSize: "12px" }}>Input:</label>
             <select
               value={block.input || ""}
               onChange={(e) => onChange({ ...block, input: e.target.value })}
               style={{
                 border: "1px solid #ccc",
                 minWidth: "120px",
-                alignItems: "center",
+                height: "20px",
+                padding: "0px 8px",
+                fontSize: "12px",
               }}
+              className="square-select"
             >
               {availableInputs.map((stepName) => (
                 <option key={stepName} value={stepName}>
@@ -286,23 +383,53 @@ const SortableBlock: React.FC<SortableBlockProps> = ({
         <strong>{block.type.toUpperCase()}</strong>
       </div>
 
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          onDelete(block.id);
-        }}
-        style={{
-          position: "absolute",
-          background: "white",
-          top: "13px",
-          right: "8px",
-          border: "none",
-          cursor: "pointer",
-        }}
-        aria-label="Delete"
-      >
-        🗑️
-      </button>
+      <div style={{ position: "absolute", top: "8px", right: "8px", display: "flex", gap: "4px" }}>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onChange({ ...block, enabled: !block.enabled });
+          }}
+          style={{
+            backgroundColor: block.enabled ? "#f3f4f6" : "#ef4444",
+            color: block.enabled ? "#374151" : "white",
+            border: "1px solid #d1d5db",
+            borderRadius: "4px",
+            padding: "2px 8px",
+            fontSize: "12px",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: "4px",
+            fontWeight: "normal",
+          }}
+          aria-label={block.enabled ? "Disable" : "Enable"}
+        >
+          {block.enabled ? "Enabled" : "Disabled"}
+        </button>
+
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete(block);
+          }}
+          style={{
+            background: "transparent",
+            border: "none",
+            cursor: "pointer",
+            color: "black",
+            fontSize: "16px",
+            fontWeight: "bold",
+            width: "20px",
+            height: "20px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+          aria-label="Delete"
+        >
+          ×
+        </button>
+      </div>
 
       <div style={{ marginTop: "8px" }}>{renderBlockContent()}</div>
       {!isDragging && (

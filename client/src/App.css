@@ -56,3 +56,127 @@
   min-width: unset !important;
   flex: none !important;
 }
+
+/* Remove rounded corners from all select elements and their options */
+select, select option {
+  border-radius: 0 !important;
+}
+
+/* Remove rounded corners from the dropdown list container */
+select:focus, select:active {
+  border-radius: 0 !important;
+  outline: none !important;
+}
+
+/* Remove platform-specific styling */
+select {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+}
+
+/* Ensure the dropdown arrow is also square */
+select::-ms-expand {
+  display: none;
+}
+
+select::-webkit-scrollbar {
+  width: 0;
+}
+
+select::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+select::-webkit-scrollbar-thumb {
+  background: transparent;
+}
+
+/* Force square corners on the dropdown list */
+select option,
+select optgroup {
+  border-radius: 0 !important;
+  -webkit-border-radius: 0 !important;
+  -moz-border-radius: 0 !important;
+}
+
+/* Target the dropdown list container in Firefox */
+select:-moz-focusring {
+  color: transparent;
+  text-shadow: 0 0 0 #000;
+}
+
+.square-select {
+  border-radius: 0 !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  appearance: none !important;
+  background-color: white;
+  border: 1px solid #d1d5db;
+  padding: 0 8px;
+  height: 20px;
+}
+
+.square-select option {
+  border-radius: 0 !important;
+  -webkit-border-radius: 0 !important;
+  -moz-border-radius: 0 !important;
+  padding: 4px 8px;
+}
+
+.square-select:focus {
+  outline: none;
+}
+
+.square-select::-ms-expand {
+  display: none;
+}
+
+.square-select::-webkit-scrollbar {
+  width: 0;
+}
+
+.square-select::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.square-select::-webkit-scrollbar-thumb {
+  background: transparent;
+}
+
+.square-select option,
+.square-select optgroup {
+  border-radius: 0 !important;
+  -webkit-border-radius: 0 !important;
+  -moz-border-radius: 0 !important;
+}
+
+.square-select:-moz-focusring {
+  color: transparent;
+  text-shadow: 0 0 0 #000;
+}
+
+.square-select * {
+  border-radius: 0 !important;
+  -webkit-border-radius: 0 !important;
+  -moz-border-radius: 0 !important;
+}
+
+/* Make all labels in blocks consistent with input placeholders */
+.block-map-container label,
+.field-selector-container label,
+div[style*="display: flex"][style*="flexDirection: row"] label {
+  font-size: 12px;
+  line-height: 1.2;
+  color: #6b7280;
+  margin-bottom: 2px;
+  font-weight: normal;
+}
+
+/* Ensure consistent height for all form elements */
+input, select, textarea {
+  height: 28px;
+  font-size: 12px;
+  line-height: 1.2;
+  padding: 0 6px;
+}
