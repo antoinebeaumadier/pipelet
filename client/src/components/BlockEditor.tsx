@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
   DndContext,
   closestCenter,
@@ -16,6 +16,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { v4 as uuidv4 } from "uuid";
+import BlockPreview from "./BlockPreview";
 
 const BLOCK_TYPES = ["filter", "map", "convert", "sort"] as const;
 type BlockType = (typeof BLOCK_TYPES)[number];
@@ -198,6 +199,7 @@ interface SortableBlockProps {
   isDraggingThis?: boolean;
   availableInputs: string[];
   inputFileName: string | null;
+  blockOutput: any[] | null;
 }
 
 function SortableBlock({
@@ -209,6 +211,7 @@ function SortableBlock({
   isDraggingThis,
   availableInputs,
   inputFileName,
+  blockOutput,
 }: SortableBlockProps) {
   const {
     attributes,
@@ -223,6 +226,7 @@ function SortableBlock({
   });
 
   const blockRef = React.useRef<HTMLDivElement>(null);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
   // Effectuer la mesure initiale au montage du composant
   React.useEffect(() => {
@@ -370,7 +374,7 @@ function SortableBlock({
             </select>
             {block.input === "raw_data" && inputFileName && (
               <span
-                style={{  
+                style={{
                   backgroundColor: "#e2fbe9",
                   padding: "2px 6px",
                   fontSize: "12px",
@@ -802,6 +806,14 @@ function SortableBlock({
           </>
         )}
       </div>
+      {!isDragging && (
+        <BlockPreview
+          outputData={blockOutput}
+          isOpen={isPreviewOpen}
+          onToggle={() => setIsPreviewOpen(!isPreviewOpen)}
+          blockName={block.outputName || block.type}
+        />
+      )}
     </div>
   );
 }
@@ -1118,10 +1130,75 @@ function BlockEditor() {
     if (active && over && active.id !== over.id) {
       const oldIndex = blocks.findIndex((b) => b.id === active.id);
       const newIndex = blocks.findIndex((b) => b.id === over.id);
-      setBlocks(arrayMove(blocks, oldIndex, newIndex));
+
+      // Create a new array with the blocks in their new order
+      const reorderedBlocks = arrayMove([...blocks], oldIndex, newIndex);
+
+      // Update input references for all blocks to maintain pipeline integrity
+      const updatedBlocks = reorderedBlocks.map((block, index) => {
+        // For the first block, ensure input is raw_data
+        if (index === 0) {
+          return { ...block, input: "raw_data" };
+        }
+
+        // For subsequent blocks, check if their input is still valid
+        const availableInputs = [
+          "raw_data",
+          ...reorderedBlocks
+            .slice(0, index)
+            .map((b) => b.outputName)
+            .filter(Boolean),
+        ];
+
+        // If current input is not available after reordering, set to previous block's output
+        if (!availableInputs.includes(block.input || "")) {
+          const previousBlockOutput = reorderedBlocks[index - 1]?.outputName;
+          return { ...block, input: previousBlockOutput || "raw_data" };
+        }
+
+        return block;
+      });
+
+      // Apply the updated blocks
+      setBlocks(updatedBlocks);
+
+      // Force recalculation of intermediate outputs
+      // This is automatically handled when blocks state changes
     }
   };
 
+  const calculateIntermediateOutputs = useCallback(() => {
+    const outputs: Record<string, any[]> = {
+      raw_data: inputData,
+      input: inputData,
+    };
+  
+    // Process each block in order, using the outputs from previous blocks
+    blocks.forEach((block) => {
+      try {
+        const inputSource = block.input || "raw_data";
+        const inputForBlock = outputs[inputSource] || [];
+        const output = applyBlockLogic(inputForBlock, block);
+  
+        // Store the output if the block has a name
+        if (block.outputName) {
+          outputs[block.outputName] = output;
+        }
+      } catch (error) {
+        console.error(
+          `Error processing block ${block.outputName || block.type}:`,
+          error
+        );
+        // Provide empty array as fallback
+        if (block.outputName) {
+          outputs[block.outputName] = [];
+        }
+      }
+    });
+  
+    return outputs;
+  }, [blocks, inputData]);
+  
   const handleBlockChange = (updatedBlock: Block) => {
     setBlocks((prevBlocks) =>
       prevBlocks.map((b) => {
@@ -1207,19 +1284,22 @@ function BlockEditor() {
     }
   };
 
-  const intermediateOutputs: Record<string, any[]> = {
-    input: inputData,
-  };
+  const intermediateOutputs = useMemo(() => {
+    return calculateIntermediateOutputs();
+  }, [calculateIntermediateOutputs]);
+
+  useEffect(() => {
+    if (inputData && inputData.length > 0) {
+      try {
+        const outputs = calculateIntermediateOutputs();
+        setOutputData(outputs[blocks[blocks.length - 1]?.outputName || "raw_data"]);
+      } catch (error) {
+        console.error("Error calculating pipeline outputs:", error);
+      }
+    }
+  }, [calculateIntermediateOutputs]);
 
   intermediateOutputs["raw_data"] = inputData;
-
-  blocks.forEach((block) => {
-    const input = intermediateOutputs[block.input || "input"];
-    const output = applyBlockLogic(input || [], block);
-    if (block.outputName) {
-      intermediateOutputs[block.outputName] = output;
-    }
-  });
 
   return (
     <div className="p-4 w-full max-w-[1400px] mx-auto">
@@ -1308,6 +1388,7 @@ function BlockEditor() {
                 isDraggingThis={activeId === block.id}
                 availableInputs={availableInputs} // 🆕
                 inputFileName={inputFileName}
+                blockOutput={intermediateOutputs[block.outputName || ""]}
               />
             );
           })}
