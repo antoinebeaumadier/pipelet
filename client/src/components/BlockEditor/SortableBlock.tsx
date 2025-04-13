@@ -29,6 +29,7 @@ import LimitBlock from "./blocks/LimitBlock";
 import LengthBlock from "./blocks/LengthBlock";
 import MinBlock from "./blocks/MinBlock";
 import MaxBlock from "./blocks/MaxBlock";
+import RegexBlock from "./blocks/RegexBlock";
 import BLOCK_DESCRIPTIONS from "./blockDescriptions";
 
 // This would normally import all block type components
@@ -132,6 +133,7 @@ const SortableBlock: React.FC<SortableBlockProps> = ({
     );
   }
 
+  // Handle changes to a block
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement> | Block
   ) => {
@@ -156,7 +158,7 @@ const SortableBlock: React.FC<SortableBlockProps> = ({
         });
       }
     } else {
-      // Handle direct block updates
+      // Handle direct block updates (like from ConvertBlock)
       onChange(e);
     }
   };
@@ -391,6 +393,8 @@ const SortableBlock: React.FC<SortableBlockProps> = ({
             inputData={inputData}
           />
         );
+      case "regex":
+        return <RegexBlock block={block} onChange={handleChange} allFields={allFields} inputData={inputData} />;
       default:
         return <div>Unknown block type: {block.type}</div>;
     }

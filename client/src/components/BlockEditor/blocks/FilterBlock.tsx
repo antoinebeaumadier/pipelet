@@ -5,7 +5,7 @@ interface FilterBlockProps {
   block: Block;
   allFields: string[];
   inputData: any[] | null;
-  onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => void;
+  onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement> | Block) => void;
 }
 
 const FilterBlock: React.FC<FilterBlockProps> = ({ block, onChange, allFields, inputData }) => {

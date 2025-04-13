@@ -3,7 +3,7 @@ import { Block } from '../types';
 
 interface MapKeysBlockProps {
   block: Block;
-  onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => void;
+  onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement> | Block) => void;
 }
 
 const MapKeysBlock: React.FC<MapKeysBlockProps> = ({ block, onChange }) => {

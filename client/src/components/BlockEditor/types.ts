@@ -1,5 +1,5 @@
 // Define block types
-export const BLOCK_TYPES = ["filter", "map", "convert", "sort", "merge", "format", "groupBy", "flatten", "get", "reverse", "pick", "mapObject", "mapKeys", "mapValues", "createObject", "createArray", "keyBy", "keys", "values", "join", "split", "unique", "limit", "length", "min", "max"] as const;
+export const BLOCK_TYPES = ["filter", "map", "convert", "sort", "merge", "format", "groupBy", "flatten", "get", "reverse", "pick", "mapObject", "mapKeys", "mapValues", "createObject", "createArray", "keyBy", "keys", "values", "join", "split", "unique", "limit", "length", "min", "max", "regex", "csv"] as const;
 export type BlockType = (typeof BLOCK_TYPES)[number];
 
 export interface ObjectTemplateItem {
@@ -75,6 +75,16 @@ export interface BlockConfig {
   minRecursive?: boolean;
   // Max block specific config
   maxRecursive?: boolean;
+  // Regex block specific config
+  pattern?: string;
+  flags?: string;
+  // Convert block specific config
+  delimiter?: string;
+  hasHeader?: boolean;
+  prettyPrint?: boolean;
+  indentation?: string;
+  namespaceHandling?: "preserve" | "strip" | "prefix";
+  encoding?: string;
 }
 
 // Block structure

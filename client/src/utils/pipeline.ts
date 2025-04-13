@@ -137,6 +137,12 @@ export function applyBlockLogic(
       case "max": {
         return applyMaxBlock(data, block);
       }
+      case "regex": {
+        return applyRegexBlock(data, block);
+      }
+      case "csv": {
+        return applyCsvBlock(data, block);
+      }
       default:
         return data;
     }
@@ -252,7 +258,15 @@ function applyMapBlock(data: any[], block: Block): any[] {
  * Convert block implementation
  */
 function applyConvertBlock(data: any[], block: Block): any[] | string[] {
-  const { format } = block.config;
+  const { 
+    format,
+    delimiter = ',',
+    hasHeader = true,
+    prettyPrint = true,
+    indentation = '2',
+    namespaceHandling = 'preserve',
+    encoding = 'utf-8'
+  } = block.config;
   
   if (!format) return data;
   
@@ -261,44 +275,93 @@ function applyConvertBlock(data: any[], block: Block): any[] | string[] {
       case "csv": {
         if (data.length === 0) return data;
         
-        // Get all unique keys from all objects
+        // Debug logging
+        console.log('CSV Conversion - Config:', {
+          hasHeader: block.config.hasHeader,
+          delimiter: block.config.delimiter,
+          encoding: block.config.encoding
+        });
+        
+        // Flatten nested objects with proper path handling
+        const flattenObject = (obj: any, prefix = ''): Record<string, any> => {
+          return Object.keys(obj).reduce((acc: Record<string, any>, key: string) => {
+            const newKey = prefix ? `${prefix}.${key}` : key;
+            if (obj[key] && typeof obj[key] === 'object' && !Array.isArray(obj[key])) {
+              Object.assign(acc, flattenObject(obj[key], newKey));
+            } else if (Array.isArray(obj[key])) {
+              // Handle arrays by joining them with a separator
+              acc[newKey] = obj[key].join(';');
+            } else {
+              acc[newKey] = obj[key];
+            }
+            return acc;
+          }, {});
+        };
+
+        // Get all unique flattened keys from all objects
+        const flattenedData = data.map(item => flattenObject(item));
         const keys = Array.from(
           new Set(
-            data.flatMap((obj) => Object.keys(obj))
+            flattenedData.flatMap((obj) => Object.keys(obj))
           )
-        );
+        ).sort();
+
+        // Debug logging
+        console.log('CSV Conversion - Keys:', keys);
+        console.log('CSV Conversion - First row:', flattenedData[0]);
 
         // Escape CSV values properly
         const escapeCsvValue = (value: any): string => {
           if (value === null || value === undefined) return '';
           const str = String(value);
-          // If the string contains commas, quotes, or newlines, wrap it in quotes and escape quotes
-          if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+          // If the string contains the delimiter, quotes, or newlines, wrap it in quotes and escape quotes
+          if (str.includes(delimiter) || str.includes('"') || str.includes('\n')) {
             return `"${str.replace(/"/g, '""')}"`;
           }
           return str;
         };
 
-        // Create header row
-        const headerRow = keys.map(escapeCsvValue).join(',');
+        const rows: string[] = [];
         
-        // Create data rows
-        const rows = data.map((obj) => 
-          keys.map((key) => {
+        // Add header row if hasHeader is true
+        if (hasHeader) {
+          const headerRow = keys.map(escapeCsvValue).join(delimiter);
+          console.log('CSV Conversion - Adding header row:', headerRow);
+          rows.push(headerRow);
+        }
+        
+        // Create data rows ensuring all keys are present in each row
+        flattenedData.forEach((obj) => {
+          const row = keys.map((key) => {
             const value = obj[key];
-            // Handle nested objects by converting them to JSON strings
-            if (value && typeof value === 'object' && !Array.isArray(value)) {
-              return escapeCsvValue(JSON.stringify(value));
-            }
             return escapeCsvValue(value);
-          }).join(',')
-        );
+          });
+          rows.push(row.join(delimiter));
+        });
 
-        return [headerRow, ...rows];
+        // Join all rows with newlines
+        const csvContent = rows.join('\n');
+        console.log('CSV Conversion - Final content:', csvContent);
+
+        // Apply encoding if specified
+        if (encoding !== 'utf-8') {
+          try {
+            const buffer = Buffer.from(csvContent);
+            const encodedContent = buffer.toString(encoding as BufferEncoding);
+            return [encodedContent];
+          } catch (encodingError) {
+            console.error('Error encoding CSV content:', encodingError);
+            // If encoding fails, return the UTF-8 content with a warning
+            return [csvContent];
+          }
+        }
+
+        return [csvContent];
       }
       
       case "json": {
-        return [JSON.stringify(data, null, 2)];
+        const space = indentation === 'tab' ? '\t' : parseInt(indentation, 10);
+        return [JSON.stringify(data, null, prettyPrint ? space : undefined)];
       }
       
       case "xml": {
@@ -328,7 +391,20 @@ function applyConvertBlock(data: any[], block: Block): any[] | string[] {
           return `<${rootName}>${content}</${rootName}>`;
         };
 
-        return [`<?xml version="1.0" encoding="UTF-8"?>\n${convertToXml(data)}`];
+        let xmlContent = convertToXml(data);
+        
+        // Handle namespaces based on the namespaceHandling option
+        if (namespaceHandling === 'strip') {
+          xmlContent = xmlContent.replace(/xmlns="[^"]*"/g, '');
+        } else if (namespaceHandling === 'prefix') {
+          // Add a default namespace prefix
+          xmlContent = xmlContent.replace(/<([^>]+)>/g, (match, tag) => {
+            if (tag.startsWith('/')) return match;
+            return `<ns:${tag.replace(/^ns:/, '')}>`;
+          });
+        }
+
+        return [`<?xml version="1.0" encoding="${encoding.toUpperCase()}"?>\n${xmlContent}`];
       }
       
       default:
@@ -1799,4 +1875,110 @@ function applyMaxBlock(data: any[], block: Block): any[] {
     }
     return [undefined];
   }
+}
+
+/**
+ * Regex block implementation
+ * Tests text against a regular expression pattern
+ */
+function applyRegexBlock(data: any[], block: Block): any[] {
+  const { field, pattern, flags = "" } = block.config;
+  
+  if (!pattern) return data;
+  
+  try {
+    const regex = new RegExp(pattern, flags);
+    
+    return data.filter(item => {
+      if (!field) {
+        // If no field specified, test the entire item as string
+        return regex.test(String(item));
+      }
+      
+      const value = getNestedValue(item, field);
+      if (value === undefined) return false;
+      
+      return regex.test(String(value));
+    });
+  } catch (error) {
+    console.error('Error in regex block:', error);
+    return data;
+  }
+}
+
+/**
+ * CSV block implementation
+ */
+function applyCsvBlock(data: any[], block: Block): string[] {
+  if (data.length === 0) return [];
+  
+  const {
+    delimiter = ',',
+    hasHeader = true,
+    encoding = 'utf-8'
+  } = block.config;
+
+  // Flatten nested objects with proper path handling
+  const flattenObject = (obj: any, prefix = ''): Record<string, any> => {
+    return Object.keys(obj).reduce((acc: Record<string, any>, key: string) => {
+      const newKey = prefix ? `${prefix}.${key}` : key;
+      if (obj[key] && typeof obj[key] === 'object' && !Array.isArray(obj[key])) {
+        Object.assign(acc, flattenObject(obj[key], newKey));
+      } else if (Array.isArray(obj[key])) {
+        acc[newKey] = obj[key].join(';');
+      } else {
+        acc[newKey] = obj[key];
+      }
+      return acc;
+    }, {});
+  };
+
+  // Get all unique flattened keys from all objects
+  const flattenedData = data.map(item => flattenObject(item));
+  const keys = Array.from(
+    new Set(
+      flattenedData.flatMap(obj => Object.keys(obj))
+    )
+  ).sort();
+
+  // Escape CSV values properly
+  const escapeCsvValue = (value: any): string => {
+    if (value === null || value === undefined) return '';
+    const str = String(value);
+    if (str.includes(delimiter) || str.includes('"') || str.includes('\n')) {
+      return `"${str.replace(/"/g, '""')}"`;
+    }
+    return str;
+  };
+
+  const rows: string[] = [];
+  
+  // Add header row if hasHeader is true
+  if (hasHeader) {
+    rows.push(keys.map(escapeCsvValue).join(delimiter));
+  }
+  
+  // Create data rows
+  flattenedData.forEach(obj => {
+    const row = keys.map(key => escapeCsvValue(obj[key]));
+    rows.push(row.join(delimiter));
+  });
+
+  // Join all rows with newlines
+  const csvContent = rows.join('\n');
+
+  // Apply encoding if specified
+  if (encoding && encoding !== 'utf-8') {
+    try {
+      const buffer = Buffer.from(csvContent);
+      const encodedContent = buffer.toString(encoding as BufferEncoding);
+      return [encodedContent];
+    } catch (encodingError) {
+      console.error('Error encoding CSV content:', encodingError);
+      // If encoding fails, return the UTF-8 content with a warning
+      return [csvContent];
+    }
+  }
+
+  return [csvContent];
 }

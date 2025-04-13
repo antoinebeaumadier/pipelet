@@ -3,7 +3,7 @@ import { Block } from '../types';
 
 interface FlattenBlockProps {
   block: Block;
-  onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => void;
+  onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement> | Block) => void;
 }
 
 const FlattenBlock: React.FC<FlattenBlockProps> = ({ block, onChange }) => {

@@ -5,7 +5,7 @@ interface MapBlockProps {
   block: Block;
   allFields: string[];
   inputData: any[] | null;
-  onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => void;
+  onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement> | Block) => void;
 }
 
 const MapBlock: React.FC<MapBlockProps> = ({ block, onChange, allFields, inputData }) => {
@@ -355,6 +355,90 @@ const MapBlock: React.FC<MapBlockProps> = ({ block, onChange, allFields, inputDa
               style={{
                 width: "60px",
                 minWidth: "60px",
+                height: "20px",
+                padding: "0px 8px",
+                fontSize: "12px",
+              }}
+            />
+          </div>
+        )}
+
+        {block.config.transform === "array-filter" && (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "row",
+              gap: "8px",
+              alignItems: "center",
+            }}
+          >
+            <label style={{ fontSize: "12px", minWidth: "40px" }}>
+              Condition:
+            </label>
+            <input
+              name="transformOption"
+              placeholder="Ex: item > 2"
+              value={block.config.transformOption || ""}
+              onChange={onChange}
+              style={{
+                width: "200px",
+                minWidth: "200px",
+                height: "20px",
+                padding: "0px 8px",
+                fontSize: "12px",
+              }}
+            />
+          </div>
+        )}
+
+        {block.config.transform === "array-map" && (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "row",
+              gap: "8px",
+              alignItems: "center",
+            }}
+          >
+            <label style={{ fontSize: "12px", minWidth: "40px" }}>
+              Transform:
+            </label>
+            <input
+              name="transformOption"
+              placeholder="Ex: item * 2"
+              value={block.config.transformOption || ""}
+              onChange={onChange}
+              style={{
+                width: "200px",
+                minWidth: "200px",
+                height: "20px",
+                padding: "0px 8px",
+                fontSize: "12px",
+              }}
+            />
+          </div>
+        )}
+
+        {block.config.transform === "array-reduce" && (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "row",
+              gap: "8px",
+              alignItems: "center",
+            }}
+          >
+            <label style={{ fontSize: "12px", minWidth: "40px" }}>
+              Formula:
+            </label>
+            <input
+              name="transformOption"
+              placeholder="Ex: acc + item"
+              value={block.config.transformOption || ""}
+              onChange={onChange}
+              style={{
+                width: "200px",
+                minWidth: "200px",
                 height: "20px",
                 padding: "0px 8px",
                 fontSize: "12px",

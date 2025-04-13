@@ -8,7 +8,7 @@ interface FormatBlockProps {
   onChange: (
     e: React.ChangeEvent<
       HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
-    >
+    > | Block
   ) => void;
 }
 

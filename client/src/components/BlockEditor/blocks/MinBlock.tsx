@@ -3,7 +3,7 @@ import { Block } from '../types';
 
 interface MinBlockProps {
   block: Block;
-  onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => void;
+  onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement> | Block) => void;
   allFields: string[];
   inputData: any[] | null;
 }

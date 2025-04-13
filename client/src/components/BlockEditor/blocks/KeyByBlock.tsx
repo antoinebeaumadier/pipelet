@@ -4,7 +4,7 @@ import FieldSelector from '../../common/FieldSelector';
 
 interface KeyByBlockProps {
   block: Block;
-  onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => void;
+  onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement> | Block) => void;
   allFields: string[];
   inputData: any[] | null;
 }

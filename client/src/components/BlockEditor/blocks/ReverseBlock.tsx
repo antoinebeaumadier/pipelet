@@ -3,7 +3,7 @@ import { Block } from '../types';
 
 interface ReverseBlockProps {
   block: Block;
-  onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => void;
+  onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement> | Block) => void;
 }
 
 const ReverseBlock: React.FC<ReverseBlockProps> = ({ block, onChange }) => {

@@ -4,7 +4,7 @@ import BLOCK_DESCRIPTIONS from './blockDescriptions';
 
 interface BlockToolbarProps {
   onAddBlock: (type: BlockType) => void;
-  disabled: boolean;
+  disabled?: boolean;
 }
 
 const BlockToolbar: React.FC<BlockToolbarProps> = ({ onAddBlock, disabled }) => {
@@ -13,10 +13,13 @@ const BlockToolbar: React.FC<BlockToolbarProps> = ({ onAddBlock, disabled }) => 
   const searchRef = useRef<HTMLDivElement>(null);
 
   // Filter block types based on search term
-  const filteredTypes = BLOCK_TYPES.filter(type => 
-    type.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (BLOCK_DESCRIPTIONS[type] && BLOCK_DESCRIPTIONS[type].toLowerCase().includes(searchTerm.toLowerCase()))
-  ).sort((a, b) => a.localeCompare(b));
+  const filteredTypes = BLOCK_TYPES.filter(type => {
+    if (!searchTerm) return true; // Show all types when search is empty
+    return (
+      type.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (BLOCK_DESCRIPTIONS[type] && BLOCK_DESCRIPTIONS[type].toLowerCase().includes(searchTerm.toLowerCase()))
+    );
+  }).sort((a, b) => a.localeCompare(b));
 
   // Close suggestions when clicking outside
   useEffect(() => {
@@ -39,7 +42,17 @@ const BlockToolbar: React.FC<BlockToolbarProps> = ({ onAddBlock, disabled }) => 
   };
 
   return (
-    <div ref={searchRef} style={{ position: 'relative', marginTop: '8px', width: '600px' }}>
+    <div 
+      ref={searchRef} 
+      style={{ 
+        position: 'relative', 
+        marginTop: '8px',
+        marginBottom: showSuggestions ? '300px' : '8px',
+        width: '100%',
+        maxWidth: '600px',
+        zIndex: 1000
+      }}
+    >
       <input
         type="text"
         value={searchTerm}
@@ -70,43 +83,38 @@ const BlockToolbar: React.FC<BlockToolbarProps> = ({ onAddBlock, disabled }) => 
             position: 'absolute',
             top: '100%',
             left: 0,
-            width: '100%',
-            boxSizing: 'border-box',
+            right: 0,
             backgroundColor: 'white',
             border: '1px solid #d1d5db',
             borderRadius: '4px',
             marginTop: '4px',
             maxHeight: '300px',
             overflowY: 'auto',
-            zIndex: 1000,
+            zIndex: 1001,
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
           }}
         >
           {filteredTypes.map((type) => (
             <div
               key={type}
+              className="block-suggestion-item"
               onClick={() => handleSelectType(type)}
               style={{
                 padding: '8px 12px',
                 cursor: 'pointer',
-                borderBottom: '1px solid #f3f4f6',
                 fontSize: '12px',
-                display: 'flex',
-                alignItems: 'center',
+                borderBottom: '1px solid #f3f4f6',
               }}
-              className="block-suggestion-item"
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLElement).style.backgroundColor = '#f3f4f6';
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLElement).style.backgroundColor = 'white';
+              }}
             >
-              <div style={{ fontWeight: 'bold', minWidth: '100px' }}>
-                {type}
-              </div>
+              <div style={{ fontWeight: 500 }}>{type}</div>
               {BLOCK_DESCRIPTIONS[type] && (
-                <div
-                  style={{
-                    fontSize: '11px',
-                    color: '#666',
-                    marginLeft: '12px',
-                    flex: 1,
-                  }}
-                >
+                <div style={{ color: '#6b7280', fontSize: '11px', marginTop: '2px' }}>
                   {BLOCK_DESCRIPTIONS[type]}
                 </div>
               )}

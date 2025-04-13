@@ -5,7 +5,7 @@ interface SortBlockProps {
   block: Block;
   allFields: string[];
   inputData: any[] | null;
-  onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => void;
+  onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement> | Block) => void;
 }
 
 const SortBlock: React.FC<SortBlockProps> = ({ block, onChange, allFields, inputData }) => {
