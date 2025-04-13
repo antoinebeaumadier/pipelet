@@ -16,7 +16,7 @@ const BlockToolbar: React.FC<BlockToolbarProps> = ({ onAddBlock, disabled }) => 
   const filteredTypes = BLOCK_TYPES.filter(type => 
     type.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (BLOCK_DESCRIPTIONS[type] && BLOCK_DESCRIPTIONS[type].toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  ).sort((a, b) => a.localeCompare(b));
 
   // Close suggestions when clicking outside
   useEffect(() => {

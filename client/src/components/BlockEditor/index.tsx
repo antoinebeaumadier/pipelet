@@ -345,8 +345,10 @@ const BlockEditor: React.FC = () => {
   const getBlockContext = (block: Block) => {
     const context: Record<string, any[]> = {
       raw_data: inputData || [],
+      input: inputData || [], // This will always be the original input data
     };
 
+    // Add all previous steps to the context
     blocks.forEach((b) => {
       if (b.outputName) {
         context[b.outputName] = intermediateOutputs[b.outputName] || [];

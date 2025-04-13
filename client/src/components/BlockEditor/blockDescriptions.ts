@@ -20,7 +20,12 @@ const BLOCK_DESCRIPTIONS: Record<string, string> = {
   keys: "Extracts all keys from objects in the dataset.",
   values: "Extracts all values from objects in the dataset.",
   join: "Concatenates array items into a string with an optional separator.",
-  split: "Divides a string into an array of substrings using a separator."
+  split: "Divides a string into an array of substrings using a separator.",
+  unique: "Creates a copy of an array where all duplicates are removed.",
+  limit: "Creates a copy of an array cut off at the selected limit.",
+  length: "Returns the length of an array, string, or number of keys in an object.",
+  min: "Finds the minimum value in a collection of data, supporting arrays, objects, and nested structures.",
+  max: "Finds the maximum value in a collection of data, supporting arrays, objects, and nested structures."
 };
 
 export default BLOCK_DESCRIPTIONS; 

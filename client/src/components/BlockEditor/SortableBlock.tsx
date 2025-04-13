@@ -24,6 +24,11 @@ import KeysBlock from "./blocks/KeysBlock";
 import ValuesBlock from "./blocks/ValuesBlock";
 import JoinBlock from "./blocks/JoinBlock";
 import SplitBlock from "./blocks/SplitBlock";
+import UniqueBlock from "./blocks/UniqueBlock";
+import LimitBlock from "./blocks/LimitBlock";
+import LengthBlock from "./blocks/LengthBlock";
+import MinBlock from "./blocks/MinBlock";
+import MaxBlock from "./blocks/MaxBlock";
 import BLOCK_DESCRIPTIONS from "./blockDescriptions";
 
 // This would normally import all block type components
@@ -197,15 +202,6 @@ const SortableBlock: React.FC<SortableBlockProps> = ({
             onChange={handleChange}
           />
         );
-      case "format":
-        return (
-          <FormatBlock
-            block={block}
-            allFields={allFields}
-            inputData={inputData}
-            onChange={handleChange}
-          />
-        );
       case "merge":
         return (
           <MergeBlock
@@ -220,6 +216,15 @@ const SortableBlock: React.FC<SortableBlockProps> = ({
         );
       case "convert":
         return <ConvertBlock block={block} onChange={handleChange} />;
+      case "format":
+        return (
+          <FormatBlock
+            block={block}
+            onChange={handleChange}
+            allFields={allFields}
+            inputData={inputData}
+          />
+        );
       case "groupBy":
         return (
           <GroupByBlock
@@ -336,16 +341,60 @@ const SortableBlock: React.FC<SortableBlockProps> = ({
         return (
           <SplitBlock
             block={block}
+            onChange={handleChange}
             allFields={allFields}
             inputData={inputData}
+          />
+        );
+      case "unique":
+        return (
+          <UniqueBlock
+            block={block}
             onChange={handleChange}
+            allFields={allFields}
+            inputData={inputData}
+          />
+        );
+      case "limit":
+        return (
+          <LimitBlock
+            block={block}
+            onChange={handleChange}
+            allFields={allFields}
+            inputData={inputData}
+          />
+        );
+      case "length":
+        return (
+          <LengthBlock
+            block={block}
+            onChange={handleChange}
+            allFields={allFields}
+            inputData={inputData}
+          />
+        );
+      case "min":
+        return (
+          <MinBlock
+            block={block}
+            onChange={handleChange}
+            allFields={allFields}
+            inputData={inputData}
+          />
+        );
+      case "max":
+        return (
+          <MaxBlock
+            block={block}
+            onChange={handleChange}
+            allFields={allFields}
+            inputData={inputData}
           />
         );
       default:
-        return <div>Configuration not implemented for {block.type}</div>;
+        return <div>Unknown block type: {block.type}</div>;
     }
   };
-  
 
   return (
     <div

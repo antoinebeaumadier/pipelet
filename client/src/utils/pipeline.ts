@@ -6,10 +6,14 @@ import { transformValue } from './transformers';
  * Executes the full pipeline with all blocks 
  */
 export function applyPipeline(data: any[], blocks: Block[]) {
+  // Initialize context with both input and raw_data
   const context: Record<string, any[]> = {
     input: data,
     raw_data: data,
   };
+
+  // Keep track of the original input data
+  const originalInput = [...data];
 
   for (const block of blocks) {
     // Skip disabled blocks but maintain their input in the context
@@ -29,6 +33,9 @@ export function applyPipeline(data: any[], blocks: Block[]) {
       );
       continue;
     }
+
+    // Always ensure input is available in context
+    context.input = originalInput;
 
     const result = applyBlockLogic(inputData, block, context);
     console.log("⛓️ Pipeline context so far:", context);
@@ -68,7 +75,7 @@ export function applyBlockLogic(
         return applyMergeBlock(data, block, context);
       }
       case "format": {
-        return applyFormatBlock(data, block);
+        return applyFormatBlock(data, block, context);
       }
       case "groupBy": {
         return applyGroupByBlock(data, block);
@@ -114,6 +121,21 @@ export function applyBlockLogic(
       }
       case "split": {
         return applySplitBlock(data, block);
+      }
+      case "unique": {
+        return applyUniqueBlock(data, block);
+      }
+      case "limit": {
+        return applyLimitBlock(data, block);
+      }
+      case "length": {
+        return applyLengthBlock(data, block);
+      }
+      case "min": {
+        return applyMinBlock(data, block);
+      }
+      case "max": {
+        return applyMaxBlock(data, block);
       }
       default:
         return data;
@@ -329,21 +351,198 @@ function applySortBlock(data: any[], block: Block): any[] {
   });
 }
 
-function applyFormatBlock(data: any[], block: Block): any[] {
+/**
+ * Evaluate references to previous step values in a string
+ * Rules:
+ * - $ prefix is required for all variable references: $stepName, $input
+ * - Dot notation after $input maps across all items (returns array)
+ * - Array indexing is supported: $stepName[index].property, $input[index].property
+ */
+function evaluateStepReference(value: string, context?: Record<string, any[]>): any {
+  if (!context || typeof value !== 'string') {
+    return value;
+  }
+
+  // If the value ends with a dot or contains an incomplete array index, it's an incomplete reference
+  if (value.endsWith('.') || value.includes('[') && !value.includes(']')) {
+    return value;
+  }
+
+  console.log("Evaluating reference:", value, "with context:", context);
+
+  // Split the value into parts based on + operator
+  const parts = value.split(/(?<!\$[a-zA-Z0-9_]+)\s*\+\s*(?!\s*\$[a-zA-Z0-9_]+)/);
+  
+  // If there's only one part, evaluate it normally
+  if (parts.length === 1) {
+    return evaluateSingleReference(value, context);
+  }
+
+  // Evaluate each part and concatenate the results
+  return parts.map(part => evaluateSingleReference(part.trim(), context)).join(' + ');
+}
+
+function evaluateSingleReference(value: string, context: Record<string, any[]>): any {
+  // Check for $input with dot notation (should map all items)
+  if (value.startsWith('$input.')) {
+    const fieldPath = value.slice(7); // Remove '$input.'
+    if (context.input && context.input.length > 0) {
+      // Map all items in input array to get the specified field from each
+      return context.input.map(item => getNestedValue(item, fieldPath));
+    }
+    return value;
+  }
+
+  // Check for $input with array index: $input[0].property
+  const inputArrayRegex = /^\$input\[(\d+)\]((?:\.\w+|\[\d+\])*)(.*)$/;
+  const inputMatch = value.match(inputArrayRegex);
+  
+  if (inputMatch) {
+    const [, indexStr, remainingPath = '', extraText = ''] = inputMatch;
+    const index = parseInt(indexStr, 10);
+    
+    if (context.input && Array.isArray(context.input) && context.input.length > index) {
+      let current = context.input[index];
+      
+      // If no remaining path, return the whole object at this index
+      if (!remainingPath) {
+        return current + extraText;
+      }
+      
+      // Process the remaining path
+      const result = processPath(current, remainingPath, value);
+      return result !== value ? result + extraText : value;
+    }
+    return value;
+  }
+
+  // Check for $stepName with array index: $stepName[index].property
+  const stepArrayRegex = /^\$([a-zA-Z0-9_]+)\[(\d+)\]((?:\.\w+|\[\d+\])*)(.*)$/;
+  const stepArrayMatch = value.match(stepArrayRegex);
+  
+  if (stepArrayMatch) {
+    const [, stepName, indexStr, remainingPath = '', extraText = ''] = stepArrayMatch;
+    const index = parseInt(indexStr, 10);
+    
+    if (context[stepName] && Array.isArray(context[stepName]) && context[stepName].length > index) {
+      let current = context[stepName][index];
+      
+      // If no remaining path, return the whole object at this index
+      if (!remainingPath) {
+        return current + extraText;
+      }
+      
+      // Process the remaining path
+      const result = processPath(current, remainingPath, value);
+      return result !== value ? result + extraText : value;
+    }
+    return value;
+  }
+
+  // Check for $stepName with dot notation: $stepName.property
+  const stepRefRegex = /^\$([a-zA-Z0-9_]+)\.([\w\.]+)(.*)$/;
+  const stepMatch = value.match(stepRefRegex);
+  
+  if (stepMatch) {
+    const [, stepName, fieldPath, extraText = ''] = stepMatch;
+    
+    if (context[stepName] && context[stepName].length > 0) {
+      // Get the field from the first item in the step
+      const result = getNestedValue(context[stepName][0], fieldPath);
+      return result !== undefined ? result + extraText : value;
+    }
+    return value;
+  }
+  
+  return value;
+}
+
+function processPath(current: any, path: string, originalValue: string): any {
+  if (!path) return current;
+  
+  const pathParts = path.split(/(?=\[|\.)/).map(part => part.replace(/^\./, ''));
+  
+  for (const part of pathParts) {
+    if (!part) continue;
+    
+    // Handle array indexing
+    if (part.match(/^\[\d+\]$/)) {
+      const index = parseInt(part.slice(1, -1), 10);
+      if (Array.isArray(current)) {
+        current = current[index];
+      } else {
+        console.warn(`Invalid path: tried to access index ${index} on non-array:`, current);
+        return originalValue;
+      }
+    } 
+    // Handle regular property access
+    else {
+      if (current && typeof current === 'object') {
+        current = current[part];
+      } else {
+        console.warn(`Invalid path: tried to access property ${part} on non-object:`, current);
+        return originalValue;
+      }
+    }
+    
+    if (current === undefined || current === null) {
+      return originalValue;
+    }
+  }
+  
+  return current;
+}
+
+function applyFormatBlock(data: any[], block: Block, context?: Record<string, any[]>): any[] {
   const { template, newField = "formatted" } = block.config;
   const keepOriginal = !!block.config.keepOriginal;
 
-  if (!template || !newField) return data;
+  if (!template) return data;
+
+  // Ensure context has input data and maintain the original input
+  if (!context) {
+    context = { input: data };
+  } else if (!context.input) {
+    context.input = data;
+  }
+
+  // Log the context for debugging
+  console.log("Format block context:", context);
 
   return data.map((item) => {
-    const formatted = template.replace(/\{([^}]+)\}/g, (_, path) => {
+    // First evaluate any step references in the template
+    let evaluatedTemplate = template;
+    
+    // Find all $input and $stepName references
+    const refRegex = /\$(?:input|\w+)(?:\[\d+\])?(?:\.\w+)+/g;
+    const matches = template.match(refRegex) || [];
+    
+    // Evaluate each reference and replace in template
+    matches.forEach(match => {
+      const evaluated = evaluateStepReference(match, context);
+      if (evaluated !== match) {
+        evaluatedTemplate = evaluatedTemplate.replace(match, evaluated);
+      }
+    });
+    
+    // Then replace field references with values from the current item
+    const formatted = evaluatedTemplate.replace(/\{([^}]+)\}/g, (_match: string, path: string) => {
       const value = getNestedValue(item, path);
       return value !== undefined ? value : "";
     });
 
-    const result = keepOriginal ? { ...item } : {};
-    result[newField] = formatted;
-    return result;
+    // If keepOriginal is true, add the formatted value to the existing item
+    if (keepOriginal) {
+      return {
+        ...item,
+        [newField]: formatted
+      };
+    }
+    
+    // If keepOriginal is false, return just the formatted value
+    return {
+      [newField]: formatted
+    };
   });
 }
 
@@ -705,130 +904,6 @@ function applyMapValuesBlock(data: any[], block: Block): any[] {
 
     return result;
   });
-}
-
-/**
- * Evaluate references to previous step values in a string
- * Rules:
- * - $ prefix is required for all variable references: $stepName, $input
- * - Dot notation after $input maps across all items (returns array)
- * - Array indexing is supported: $stepName[index].property, $input[index].property
- */
-function evaluateStepReference(value: string, context?: Record<string, any[]>): any {
-  if (!context || typeof value !== 'string') {
-    return value;
-  }
-
-  console.log("Evaluating reference:", value);
-
-  // Check for $input with dot notation (should map all items)
-  if (value.startsWith('$input.')) {
-    const fieldPath = value.slice(7); // Remove '$input.'
-    if (context.input && context.input.length > 0) {
-      // Map all items in input array to get the specified field from each
-      return context.input.map(item => getNestedValue(item, fieldPath));
-    }
-    return value;
-  }
-
-  // Check for $input with array index: $input[0].property
-  const inputArrayRegex = /^\$input\[(\d+)\]((?:\.\w+|\[\d+\])*)$/;
-  const inputMatch = value.match(inputArrayRegex);
-  
-  if (inputMatch) {
-    const [, indexStr, remainingPath = ''] = inputMatch;
-    const index = parseInt(indexStr, 10);
-    
-    if (context.input && Array.isArray(context.input) && context.input.length > index) {
-      let current = context.input[index];
-      
-      // If no remaining path, return the whole object at this index
-      if (!remainingPath) {
-        return current;
-      }
-      
-      // Process the remaining path
-      return processPath(current, remainingPath, value);
-    }
-    return value;
-  }
-
-  // Check for $stepName with array index: $stepName[index].property
-  const stepArrayRegex = /^\$([a-zA-Z0-9_]+)\[(\d+)\]((?:\.\w+|\[\d+\])*)$/;
-  const stepArrayMatch = value.match(stepArrayRegex);
-  
-  if (stepArrayMatch) {
-    const [, stepName, indexStr, remainingPath = ''] = stepArrayMatch;
-    const index = parseInt(indexStr, 10);
-    
-    if (context[stepName] && Array.isArray(context[stepName]) && context[stepName].length > index) {
-      let current = context[stepName][index];
-      
-      // If no remaining path, return the whole object at this index
-      if (!remainingPath) {
-        return current;
-      }
-      
-      // Process the remaining path
-      return processPath(current, remainingPath, value);
-    }
-    return value;
-  }
-
-  // Check for $stepName with dot notation: $stepName.property
-  const stepRefRegex = /^\$([a-zA-Z0-9_]+)\.([\w\.]+)$/;
-  const stepMatch = value.match(stepRefRegex);
-  
-  if (stepMatch) {
-    const [, stepName, fieldPath] = stepMatch;
-    
-    if (context[stepName] && context[stepName].length > 0) {
-      // Get the field from the first item in the step
-      return getNestedValue(context[stepName][0], fieldPath);
-    }
-    return value;
-  }
-  
-  return value;
-}
-
-/**
- * Helper function to process a path with dots and array indices
- */
-function processPath(current: any, path: string, originalValue: string): any {
-  if (!path) return current;
-  
-  const pathParts = path.split(/(?=\[|\.)/).map(part => part.replace(/^\./, ''));
-  
-  for (const part of pathParts) {
-    if (!part) continue;
-    
-    // Handle array indexing
-    if (part.match(/^\[\d+\]$/)) {
-      const index = parseInt(part.slice(1, -1), 10);
-      if (Array.isArray(current)) {
-        current = current[index];
-      } else {
-        console.warn(`Invalid path: tried to access index ${index} on non-array:`, current);
-        return originalValue;
-      }
-    } 
-    // Handle regular property access
-    else {
-      if (current && typeof current === 'object') {
-        current = current[part];
-      } else {
-        console.warn(`Invalid path: tried to access property ${part} on non-object:`, current);
-        return originalValue;
-      }
-    }
-    
-    if (current === undefined || current === null) {
-      return originalValue;
-    }
-  }
-  
-  return current;
 }
 
 function applyCreateObjectBlock(data: any[], block: Block, context?: Record<string, any[]>): any[] {
@@ -1365,4 +1440,319 @@ function applySplitBlock(data: any[], block: Block): any[] {
       return splitResult;
     }
   });
+}
+
+/**
+ * Unique block implementation
+ * Creates a copy of an array where all duplicates are removed
+ */
+function applyUniqueBlock(data: any[], block: Block): any[] {
+  console.log('Applying unique block with config:', JSON.stringify(block.config));
+  console.log('Input data first item:', data.length > 0 ? JSON.stringify(data[0]) : 'No data');
+  
+  const field = block.config.field || '';
+  const compareProperty = block.config.compareProperty || '';
+  
+  // Function to remove duplicates from array
+  const uniqueArray = (arr: any[]): any[] => {
+    // For primitives or when using a compare property, we can use a simpler approach
+    if (arr.every(i => typeof i !== 'object' || i === null) || compareProperty) {
+      if (compareProperty && arr.length > 0 && typeof arr[0] === 'object') {
+        // Using a specific property for comparison with objects
+        const seen = new Set();
+        return arr.filter(item => {
+          const compareValue = item[compareProperty];
+          // Skip items that don't have the compare property
+          if (compareValue === undefined) return true;
+          
+          // Use the property value for deduplication
+          if (seen.has(compareValue)) {
+            return false;
+          }
+          seen.add(compareValue);
+          return true;
+        });
+      } else {
+        // For primitives, use Set
+        return Array.from(new Set(arr));
+      }
+    }
+    
+    // For objects without a compare property, we'll need to stringify to compare
+    const seen = new Set();
+    return arr.filter(item => {
+      const itemStr = JSON.stringify(item);
+      if (seen.has(itemStr)) {
+        return false;
+      }
+      seen.add(itemStr);
+      return true;
+    });
+  };
+  
+  // If field is specified, apply to that field
+  if (field) {
+    // First, get all the values from the specified field
+    const fieldValues = data.map(item => getNestedValue(item, field));
+    
+    // If the field values are arrays, we need to handle them differently
+    if (fieldValues.every(v => Array.isArray(v))) {
+      return data.map(item => {
+        const result = JSON.parse(JSON.stringify(item));
+        const fieldValue = getNestedValue(item, field);
+        
+        if (Array.isArray(fieldValue)) {
+          const uniqueValue = uniqueArray(fieldValue);
+          setNestedValue(result, field, uniqueValue);
+        }
+        
+        return result;
+      });
+    }
+    
+    // If the field values are objects, we need to handle them differently
+    if (fieldValues.every(v => typeof v === 'object' && v !== null)) {
+      // Create a map to track unique objects based on the compare property
+      const seen = new Set();
+      const uniqueItems = [];
+      
+      for (const item of data) {
+        const fieldValue = getNestedValue(item, field);
+        if (!fieldValue) continue;
+        
+        const compareValue = compareProperty ? fieldValue[compareProperty] : JSON.stringify(fieldValue);
+        if (!seen.has(compareValue)) {
+          seen.add(compareValue);
+          uniqueItems.push(item);
+        }
+      }
+      
+      return uniqueItems;
+    }
+    
+    // For other cases, just return the original data
+    return data;
+  } else {
+    // If no field is specified, apply unique to the entire array
+    return uniqueArray(data);
+  }
+}
+
+/**
+ * Limit block implementation
+ * Creates a copy of an array cut off at the selected limit
+ */
+function applyLimitBlock(data: any[], block: Block): any[] {
+  console.log('Applying limit block with config:', JSON.stringify(block.config));
+  console.log('Input data first item:', data.length > 0 ? JSON.stringify(data[0]) : 'No data');
+  
+  const field = block.config.field || '';
+  const limit = block.config.limit || 0;
+  
+  // If field is specified, apply to that field
+  if (field) {
+    return data.map(item => {
+      // Deep clone the original item to prevent reference issues
+      const result = JSON.parse(JSON.stringify(item));
+      const fieldValue = getNestedValue(item, field);
+      
+      // Check if the value exists and is an array
+      if (fieldValue !== undefined) {
+        if (Array.isArray(fieldValue)) {
+          // Apply limit to the array
+          const limitedValue = fieldValue.slice(0, limit);
+          
+          // Set the limited array back to the field
+          setNestedValue(result, field, limitedValue);
+        } else {
+          console.log(`Field "${field}" is not an array, skipping limit operation`);
+        }
+      } else {
+        console.log(`Field "${field}" not found in item:`, JSON.stringify(item));
+      }
+      
+      return result;
+    });
+  } else {
+    // If no field is specified, apply limit to the entire array
+    return data.slice(0, limit);
+  }
+}
+
+const applyLengthBlock = (data: any[], block: Block): any[] => {
+  const field = block.config.field || '';
+  
+  // If field is specified, get the value from that field
+  if (field) {
+    return data.map(item => {
+      const target = getNestedValue(item, field);
+      if (Array.isArray(target)) {
+        return target.length;
+      } else if (typeof target === "string") {
+        return target.length;
+      } else if (typeof target === "object" && target !== null) {
+        return Object.keys(target).length;
+      }
+      return 0;
+    });
+  } else {
+    // If no field is specified, return the total length of the array
+    return [data.length];
+  }
+};
+
+/**
+ * Min block implementation
+ * Finds the minimum value in a collection of data
+ */
+function applyMinBlock(data: any[], block: Block): any[] {
+  const { field, minRecursive } = block.config;
+  
+  // Function to find minimum value in an array
+  const findMinInArray = (arr: any[]): any => {
+    if (arr.length === 0) return undefined;
+    
+    // Filter out non-numeric values and convert to numbers
+    const numericValues = arr
+      .map(val => {
+        if (typeof val === 'string') {
+          const num = Number(val);
+          return isNaN(num) ? undefined : num;
+        }
+        return typeof val === 'number' ? val : undefined;
+      })
+      .filter((val): val is number => val !== undefined);
+    
+    if (numericValues.length === 0) return undefined;
+    return Math.min(...numericValues);
+  };
+  
+  // Function to find minimum value in an object
+  const findMinInObject = (obj: any, recursive: boolean): any => {
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
+      return undefined;
+    }
+    
+    const values = Object.values(obj);
+    const minValues: number[] = [];
+    
+    // Process each value
+    for (const value of values) {
+      if (typeof value === 'number' || (typeof value === 'string' && !isNaN(Number(value)))) {
+        minValues.push(Number(value));
+      } else if (recursive && value && typeof value === 'object' && !Array.isArray(value)) {
+        const nestedMin = findMinInObject(value, true);
+        if (nestedMin !== undefined) {
+          minValues.push(nestedMin);
+        }
+      } else if (Array.isArray(value)) {
+        const arrayMin = findMinInArray(value);
+        if (arrayMin !== undefined) {
+          minValues.push(arrayMin);
+        }
+      }
+    }
+    
+    return minValues.length > 0 ? Math.min(...minValues) : undefined;
+  };
+  
+  // If field is specified, get the value from that field
+  if (field) {
+    return data.map(item => {
+      const target = getNestedValue(item, field);
+      
+      if (Array.isArray(target)) {
+        return findMinInArray(target);
+      } else if (target && typeof target === 'object') {
+        return findMinInObject(target, !!minRecursive);
+      } else if (typeof target === 'number' || (typeof target === 'string' && !isNaN(Number(target)))) {
+        return Number(target);
+      }
+      return undefined;
+    });
+  } else {
+    // If no field is specified, find minimum in the entire data
+    if (Array.isArray(data)) {
+      return [findMinInArray(data)];
+    } else if (data && typeof data === 'object') {
+      return [findMinInObject(data, !!minRecursive)];
+    }
+    return [undefined];
+  }
+}
+
+function applyMaxBlock(data: any[], block: Block): any[] {
+  const { field, maxRecursive } = block.config;
+  
+  // Function to find maximum value in an array
+  const findMaxInArray = (arr: any[]): any => {
+    if (arr.length === 0) return undefined;
+    
+    // Filter out non-numeric values and convert to numbers
+    const numericValues = arr
+      .map(val => {
+        if (typeof val === 'string') {
+          const num = Number(val);
+          return isNaN(num) ? undefined : num;
+        }
+        return typeof val === 'number' ? val : undefined;
+      })
+      .filter((val): val is number => val !== undefined);
+    
+    if (numericValues.length === 0) return undefined;
+    return Math.max(...numericValues);
+  };
+  
+  // Function to find maximum value in an object
+  const findMaxInObject = (obj: any, recursive: boolean): any => {
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
+      return undefined;
+    }
+    
+    const values = Object.values(obj);
+    const maxValues: number[] = [];
+    
+    // Process each value
+    for (const value of values) {
+      if (typeof value === 'number' || (typeof value === 'string' && !isNaN(Number(value)))) {
+        maxValues.push(Number(value));
+      } else if (recursive && value && typeof value === 'object' && !Array.isArray(value)) {
+        const nestedMax = findMaxInObject(value, true);
+        if (nestedMax !== undefined) {
+          maxValues.push(nestedMax);
+        }
+      } else if (Array.isArray(value)) {
+        const arrayMax = findMaxInArray(value);
+        if (arrayMax !== undefined) {
+          maxValues.push(arrayMax);
+        }
+      }
+    }
+    
+    return maxValues.length > 0 ? Math.max(...maxValues) : undefined;
+  };
+  
+  // If field is specified, get the value from that field
+  if (field) {
+    return data.map(item => {
+      const target = getNestedValue(item, field);
+      
+      if (Array.isArray(target)) {
+        return findMaxInArray(target);
+      } else if (target && typeof target === 'object') {
+        return findMaxInObject(target, !!maxRecursive);
+      } else if (typeof target === 'number' || (typeof target === 'string' && !isNaN(Number(target)))) {
+        return Number(target);
+      }
+      return undefined;
+    });
+  } else {
+    // If no field is specified, find maximum in the entire data
+    if (Array.isArray(data)) {
+      return [findMaxInArray(data)];
+    } else if (data && typeof data === 'object') {
+      return [findMaxInObject(data, !!maxRecursive)];
+    }
+    return [undefined];
+  }
 }
