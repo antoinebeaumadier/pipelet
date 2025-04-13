@@ -19,6 +19,9 @@ export function transformValue(
       return Number(value);
     case "string":
       return String(value);
+    case "keepOnly":
+      // Just return the value as is - the filtering happens in applyMapBlock
+      return value;
     case "round":
       const decimals = parseInt(transformOption || "0", 10);
       return Number(Number(value).toFixed(decimals));

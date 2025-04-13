@@ -8,8 +8,8 @@ import SortBlock from "./blocks/SortBlock";
 import MergeBlock from "./blocks/MergeBlock";
 import ConvertBlock from "./blocks/ConvertBlock";
 import FormatBlock from "./blocks/FormatBlock";
-import AggregateBlock from "./blocks/AggregateBlock";
-import StructureBlock from "./blocks/StructureBlock";
+import GroupByBlock from "./blocks/AggregateBlock";
+import FlattenBlock from "./blocks/FlattenBlock";
 import GetBlock from "./blocks/GetBlock";
 import ReverseBlock from "./blocks/ReverseBlock";
 import PickBlock from "./blocks/PickBlock";
@@ -18,6 +18,13 @@ import BlockPreview from "./BlockPreview";
 import MapKeysBlock from "./blocks/MapKeysBlock";
 import MapValuesBlock from "./blocks/MapValuesBlock";
 import CreateObjectBlock from "./blocks/CreateObjectBlock";
+import CreateArrayBlock from "./blocks/CreateArrayBlock";
+import { KeyByBlock } from "./blocks/KeyByBlock";
+import KeysBlock from "./blocks/KeysBlock";
+import ValuesBlock from "./blocks/ValuesBlock";
+import JoinBlock from "./blocks/JoinBlock";
+import SplitBlock from "./blocks/SplitBlock";
+import BLOCK_DESCRIPTIONS from "./blockDescriptions";
 
 // This would normally import all block type components
 // import MapBlock from './blocks/MapBlock';
@@ -213,18 +220,18 @@ const SortableBlock: React.FC<SortableBlockProps> = ({
         );
       case "convert":
         return <ConvertBlock block={block} onChange={handleChange} />;
-      case "aggregate":
+      case "groupBy":
         return (
-          <AggregateBlock
+          <GroupByBlock
             block={block}
+            onChange={handleChange}
             allFields={allFields}
             inputData={inputData}
-            onChange={handleChange}
           />
         );
-      case "structure":
+      case "flatten":
         return (
-          <StructureBlock
+          <FlattenBlock
             block={block}
             onChange={handleChange}
           />
@@ -284,8 +291,58 @@ const SortableBlock: React.FC<SortableBlockProps> = ({
             onChange={handleChange}
           />
         );
+      case "createArray":
+        return (
+          <CreateArrayBlock
+            block={block}
+            onChange={handleChange}
+          />
+        );
+      case "keyBy":
+        return (
+          <KeyByBlock
+            block={block}
+            allFields={allFields}
+            inputData={inputData}
+            onChange={handleChange}
+          />
+        );
+      case "keys":
+        return (
+          <KeysBlock
+            block={block}
+            allFields={allFields}
+            inputData={inputData}
+            onChange={handleChange}
+          />
+        );
+      case "values":
+        return (
+          <ValuesBlock
+            block={block}
+            allFields={allFields}
+            inputData={inputData}
+            onChange={handleChange}
+          />
+        );
+      case "join":
+        return (
+          <JoinBlock
+            block={block}
+            onChange={handleChange}
+          />
+        );
+      case "split":
+        return (
+          <SplitBlock
+            block={block}
+            allFields={allFields}
+            inputData={inputData}
+            onChange={handleChange}
+          />
+        );
       default:
-        return null;
+        return <div>Configuration not implemented for {block.type}</div>;
     }
   };
   
@@ -327,7 +384,7 @@ const SortableBlock: React.FC<SortableBlockProps> = ({
           />
         </div>
 
-        {block.type !== "convert" && (
+        {block.type !== "convert" && block.type !== "createObject" && block.type !== "createArray" && (
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
             <label style={{ minWidth: "20px", fontSize: "12px" }}>Input:</label>
             <select
@@ -377,10 +434,20 @@ const SortableBlock: React.FC<SortableBlockProps> = ({
           borderRadius: "4px",
           display: "flex",
           alignItems: "center",
-          justifyContent: "space-between",
         }}
       >
         <strong>{block.type.toUpperCase()}</strong>
+        {BLOCK_DESCRIPTIONS[block.type] && (
+          <div
+            style={{
+              fontSize: "11px",
+              color: "#666",
+              marginLeft: "12px",
+            }}
+          >
+            {BLOCK_DESCRIPTIONS[block.type]}
+          </div>
+        )}
       </div>
 
       <div style={{ position: "absolute", top: "8px", right: "8px", display: "flex", gap: "4px" }}>

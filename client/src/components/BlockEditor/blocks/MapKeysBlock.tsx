@@ -18,6 +18,9 @@ const MapKeysBlock: React.FC<MapKeysBlockProps> = ({ block, onChange }) => {
       case 'lowercase':
         keyCallback = '.key.toLowerCase()';
         break;
+      case 'capitalize':
+        keyCallback = '.key.charAt(0).toUpperCase() + .key.slice(1)';
+        break;
       case 'prefix':
         keyCallback = '"prefix_" + .key';
         break;
@@ -25,10 +28,40 @@ const MapKeysBlock: React.FC<MapKeysBlockProps> = ({ block, onChange }) => {
         keyCallback = '.key + "_suffix"';
         break;
       case 'camelCase':
-        keyCallback = '.key.replace(/(?:^|_)(\\w)/g, (_, c) => c.toUpperCase())';
+        keyCallback = '.key.replace(/(?:^|[-_])(\\w)/g, (_, c) => c.toUpperCase()).replace(/^\\w/, c => c.toLowerCase())';
+        break;
+      case 'pascalCase':
+        keyCallback = '.key.replace(/(?:^|[-_])(\\w)/g, (_, c) => c.toUpperCase())';
         break;
       case 'snakeCase':
-        keyCallback = '.key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`)';
+        keyCallback = '.key.replace(/([A-Z])/g, "_$1").toLowerCase().replace(/^_/, "")';
+        break;
+      case 'kebabCase':
+        keyCallback = '.key.replace(/([A-Z])/g, "-$1").toLowerCase().replace(/^-/, "")';
+        break;
+      case 'dotCase':
+        keyCallback = '.key.replace(/([A-Z])/g, ".$1").toLowerCase().replace(/^\\./, "")';
+        break;
+      case 'trim':
+        keyCallback = '.key.trim()';
+        break;
+      case 'removeSpaces':
+        keyCallback = '.key.replace(/\\s+/g, "")';
+        break;
+      case 'slugify':
+        keyCallback = '.key.toLowerCase().replace(/\\s+/g, "-").replace(/[^\\w-]+/g, "")';
+        break;
+      case 'capitalize_words':
+        keyCallback = '.key.split(" ").map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" ")';
+        break;
+      case 'abbreviate':
+        keyCallback = '.key.split(" ").map(word => word.charAt(0)).join("")';
+        break;
+      case 'reverse':
+        keyCallback = '.key.split("").reverse().join("")';
+        break;
+      case 'hash':
+        keyCallback = '"key_" + Math.abs(.key.split("").reduce((a, b) => (a << 5) - a + b.charCodeAt(0), 0)).toString(36).substring(0, 6)';
         break;
       case 'custom':
         keyCallback = block.config.keyCallback || '';
@@ -68,37 +101,64 @@ const MapKeysBlock: React.FC<MapKeysBlockProps> = ({ block, onChange }) => {
         style={{
           display: "flex",
           flexDirection: "row",
-          gap: "8px",
-          alignItems: "center",
+          gap: "16px",
+          alignItems: "flex-start",
+          flexWrap: "wrap",
         }}
       >
-        <label style={{ fontSize: "12px", minWidth: "60px" }}>
-          Transform:
-        </label>
-        <select
-          name="transform"
-          value={block.config.transform || ""}
-          onChange={handleTransformChange}
+        <div
           style={{
-            width: "120px",
-            minWidth: "120px",
-            height: "20px",
-            padding: "0px 8px",
-            fontSize: "12px",
+            display: "flex",
+            flexDirection: "row",
+            gap: "8px",
+            alignItems: "center",
           }}
         >
-          <option value="">None</option>
-          <option value="uppercase">Uppercase</option>
-          <option value="lowercase">Lowercase</option>
-          <option value="prefix">Add Prefix</option>
-          <option value="suffix">Add Suffix</option>
-          <option value="camelCase">Camel Case</option>
-          <option value="snakeCase">Snake Case</option>
-          <option value="custom">Custom Expression</option>
-        </select>
-      </div>
+          <label style={{ fontSize: "12px", minWidth: "60px" }}>
+            Transform:
+          </label>
+          <select
+            name="transform"
+            value={block.config.transform || ""}
+            onChange={handleTransformChange}
+            style={{
+              width: "240px",
+              minWidth: "240px",
+              height: "24px",
+              padding: "0px 8px",
+              fontSize: "12px",
+            }}
+          >
+            <option value="">None</option>
+            <optgroup label="Case Transformations">
+              <option value="uppercase">UPPERCASE</option>
+              <option value="lowercase">lowercase</option>
+              <option value="capitalize">Capitalize First Letter</option>
+              <option value="capitalize_words">Capitalize Each Word</option>
+            </optgroup>
+            <optgroup label="Naming Conventions">
+              <option value="camelCase">camelCase</option>
+              <option value="pascalCase">PascalCase</option>
+              <option value="snakeCase">snake_case</option>
+              <option value="kebabCase">kebab-case</option>
+              <option value="dotCase">dot.case</option>
+            </optgroup>
+            <optgroup label="Additions">
+              <option value="prefix">Add Prefix</option>
+              <option value="suffix">Add Suffix</option>
+            </optgroup>
+            <optgroup label="Transformations">
+              <option value="trim">Trim Whitespace</option>
+              <option value="removeSpaces">Remove Spaces</option>
+              <option value="slugify">Slugify</option>
+              <option value="abbreviate">Abbreviate</option>
+              <option value="reverse">Reverse</option>
+              <option value="hash">Hash</option>
+            </optgroup>
+            <option value="custom">Custom Expression</option>
+          </select>
+        </div>
 
-      {(block.config.transform === 'custom' || block.config.transform === 'prefix' || block.config.transform === 'suffix') && (
         <div
           style={{
             display: "flex",
@@ -112,33 +172,32 @@ const MapKeysBlock: React.FC<MapKeysBlockProps> = ({ block, onChange }) => {
           </label>
           <input
             name="keyCallback"
-            placeholder={block.config.transform === 'custom' ? 'Enter JavaScript expression using .key' : 'Enter text'}
+            placeholder="Enter JavaScript expression using .key"
             value={block.config.keyCallback || ""}
             onChange={onChange}
             style={{
-              width: "200px",
-              minWidth: "200px",
-              height: "20px",
+              width: "240px",
+              minWidth: "240px",
+              height: "24px",
               padding: "0px 8px",
               fontSize: "12px",
             }}
           />
         </div>
-      )}
+      </div>
 
       <div style={{ fontSize: "10px", color: "#666", marginTop: "4px" }}>
-        {block.config.transform === 'custom' && (
-          <div>
-            Use <code>.key</code> to reference the original key name
-            <br />
-            Example: <code>"prefix_" + .key + "_suffix"</code>
-          </div>
-        )}
-        {(block.config.transform === 'prefix' || block.config.transform === 'suffix') && (
-          <div>
-            Enter the text to add before/after each key
-          </div>
-        )}
+        Use <code>.key</code> to reference the original key name
+        <br />
+        Examples:
+        <br />
+        <code>`.key.replace(/old/, 'new')`</code> - Replace text in keys
+        <br />
+        <code>`.key.substr(0, 10)`</code> - Truncate long key names
+        <br />
+        <code>`"my_" + .key`</code> - Add prefix to keys
+        <br />
+        <code>`.key.includes("temp") ? "temporary_" + .key : .key`</code> - Conditional renaming
       </div>
     </div>
   );

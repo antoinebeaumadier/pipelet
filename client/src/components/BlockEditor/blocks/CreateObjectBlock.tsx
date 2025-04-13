@@ -101,9 +101,12 @@ const CreateObjectBlock: React.FC<CreateObjectBlockProps> = ({ block, onChange }
     // Update the target item
     const targetIndex = indices[indices.length - 1];
     if (current[targetIndex]) {
+      const willBeNested = !current[targetIndex].isNested;
       current[targetIndex] = {
         ...current[targetIndex],
-        isNested: !current[targetIndex].isNested,
+        isNested: willBeNested,
+        // Clear the value if property becomes nested
+        ...(willBeNested ? { value: '' } : {}),
         children: current[targetIndex].children || []
       };
     }
@@ -148,45 +151,58 @@ const CreateObjectBlock: React.FC<CreateObjectBlockProps> = ({ block, onChange }
 
   const renderProperty = (property: ObjectTemplateItem, indices: number[]) => {
     return (
-      <div key={indices.join('-')} style={{ marginLeft: `${indices.length * 20}px` }}>
-        <div style={{ display: 'flex', flexDirection: 'row', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+      <div key={indices.join('-')} style={{ marginLeft: `${indices.length * 20}px`, maxWidth: '100%' }}>
+        <div style={{ 
+          display: 'flex', 
+          flexDirection: 'row', 
+          gap: '4px', 
+          alignItems: 'center', 
+          marginBottom: '8px',
+          flexWrap: 'wrap'
+        }}>
           <input
             type="text"
             placeholder="Property name"
             value={property.key}
             onChange={(e) => handlePropertyChange(indices, 'key', e.target.value)}
             style={{
-              width: '120px',
-              minWidth: '120px',
+              width: '100px',
+              minWidth: '100px',
               height: '20px',
-              padding: '0px 8px',
+              padding: '0px 4px',
               fontSize: '12px',
               border: '1px solid #ccc',
+              borderRadius: '2px',
             }}
           />
-          <input
-            type="text"
-            placeholder="Value"
-            value={property.value}
-            onChange={(e) => handlePropertyChange(indices, 'value', e.target.value)}
-            style={{
-              width: '120px',
-              minWidth: '120px',
-              height: '20px',
-              padding: '0px 8px',
-              fontSize: '12px',
-              border: '1px solid #ccc',
-            }}
-          />
+          {!property.isNested && (
+            <input
+              type="text"
+              placeholder="Value"
+              value={property.value}
+              onChange={(e) => handlePropertyChange(indices, 'value', e.target.value)}
+              style={{
+                width: '100px',
+                minWidth: '100px',
+                height: '20px',
+                padding: '0px 4px',
+                fontSize: '12px',
+                border: '1px solid #ccc',
+                borderRadius: '2px',
+              }}
+            />
+          )}
           <button
             onClick={() => handleToggleNested(indices)}
             style={{
-              padding: '2px 8px',
-              fontSize: '12px',
+              padding: '2px 6px',
+              fontSize: '11px',
               height: '20px',
               border: '1px solid #ccc',
               backgroundColor: '#f3f4f6',
               cursor: 'pointer',
+              borderRadius: '2px',
+              whiteSpace: 'nowrap',
             }}
           >
             {property.isNested ? 'Remove Nested' : 'Add Nested'}
@@ -194,32 +210,37 @@ const CreateObjectBlock: React.FC<CreateObjectBlockProps> = ({ block, onChange }
           <button
             onClick={() => handleRemoveProperty(indices)}
             style={{
-              padding: '2px 8px',
-              fontSize: '12px',
+              padding: '2px 6px',
+              fontSize: '11px',
               height: '20px',
               border: '1px solid #ccc',
               backgroundColor: '#f3f4f6',
               cursor: 'pointer',
+              borderRadius: '2px',
+              whiteSpace: 'nowrap',
             }}
           >
             Remove
           </button>
         </div>
+        
         {property.isNested && property.children && (
-          <div>
+          <div style={{ marginLeft: '8px' }}>
             {property.children.map((child, childIndex) => 
               renderProperty(child, [...indices, childIndex])
             )}
             <button
               onClick={() => handleAddProperty([...indices, property.children!.length])}
               style={{
-                padding: '2px 8px',
-                fontSize: '12px',
+                padding: '2px 6px',
+                fontSize: '11px',
                 height: '20px',
                 border: '1px solid #ccc',
                 backgroundColor: '#f3f4f6',
                 cursor: 'pointer',
                 marginBottom: '8px',
+                borderRadius: '2px',
+                whiteSpace: 'nowrap',
               }}
             >
               Add Nested Property
@@ -231,23 +252,36 @@ const CreateObjectBlock: React.FC<CreateObjectBlockProps> = ({ block, onChange }
   };
 
   return (
-    <div>
+    <div style={{ maxWidth: '100%', overflow: 'hidden' }}>
       <div style={{ marginBottom: '16px' }}>
         <button
           onClick={() => handleAddProperty([])}
           style={{
-            padding: '2px 8px',
-            fontSize: '12px',
+            padding: '2px 6px',
+            fontSize: '11px',
             height: '20px',
             border: '1px solid #ccc',
             backgroundColor: '#f3f4f6',
             cursor: 'pointer',
+            borderRadius: '2px',
+            whiteSpace: 'nowrap',
           }}
         >
           Add Property
         </button>
       </div>
-      {objectTemplate.map((property, index) => renderProperty(property, [index]))}
+      <div style={{ maxWidth: '100%', overflow: 'auto' }}>
+        {objectTemplate.map((property, index) => renderProperty(property, [index]))}
+      </div>
+      <div
+        style={{
+          fontSize: '11px',
+          color: '#666',
+          marginTop: '8px',
+        }}
+      >
+        Reference syntax: (1) "$input.field" maps field across all input items, (2) "$input[0].field" accesses a specific item, (3) "$stepName.field" or "$stepName[index].field" for other steps.
+      </div>
     </div>
   );
 };

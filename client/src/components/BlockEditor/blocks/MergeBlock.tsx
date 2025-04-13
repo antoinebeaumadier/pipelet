@@ -187,6 +187,7 @@ const MergeBlock: React.FC<MergeBlockProps> = ({
             <option value="combine">Combine</option>
             <option value="override">Replace</option>
             <option value="append">Append</option>
+            <option value="union">Union</option>
           </select>
         </div>
       </div>

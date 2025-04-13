@@ -34,6 +34,7 @@ const BlockEditor: React.FC = () => {
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [inputFileName, setInputFileName] = useState<string | null>(null);
+  const [copyButtonText, setCopyButtonText] = useState<string>("📋 Copy");
 
   // Set up the global styles
   useEffect(() => {
@@ -230,7 +231,42 @@ const BlockEditor: React.FC = () => {
 
   // Handle block deletion
   const handleBlockDelete = (id: string) => {
-    setBlocks((prev) => prev.filter((b) => b.id !== id));
+    setBlocks((prev) => {
+      // Find the index of the block to delete
+      const deleteIndex = prev.findIndex((b) => b.id === id);
+      if (deleteIndex === -1) return prev;
+
+      // Get the block to be deleted
+      const deletedBlock = prev[deleteIndex];
+      
+      // Create new blocks array without the deleted block
+      const newBlocks = prev.filter((b) => b.id !== id);
+
+      // Update input references for blocks after the deleted block
+      return newBlocks.map((block, index) => {
+        // If this block was after the deleted block
+        if (index >= deleteIndex) {
+          // Get available inputs from previous blocks
+          const availableInputs = [
+            "raw_data",
+            ...newBlocks
+              .slice(0, index)
+              .map((b) => b.outputName)
+              .filter(Boolean),
+          ];
+
+          // If current input is not available after deletion, set to previous block's output
+          if (!availableInputs.includes(block.input || "")) {
+            const previousBlockOutput = newBlocks[index - 1]?.outputName;
+            return {
+              ...block,
+              input: previousBlockOutput || "raw_data",
+            };
+          }
+        }
+        return block;
+      });
+    });
   };
 
   // Handle file upload
@@ -492,6 +528,26 @@ const BlockEditor: React.FC = () => {
           >
             <h2 style={{ fontWeight: "bold", marginBottom: "16px" }}>
               📤 Pipeline Result
+              {outputData && (
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(JSON.stringify(outputData, null, 2));
+                    setCopyButtonText("✅ Copied!");
+                    setTimeout(() => setCopyButtonText("📋 Copy"), 2000);
+                  }}
+                  style={{
+                    marginLeft: "8px",
+                    padding: "4px 8px",
+                    backgroundColor: "#f0f0f0",
+                    border: "1px solid #ddd",
+                    borderRadius: "4px",
+                    cursor: "pointer",
+                    fontSize: "12px",
+                  }}
+                >
+                  {copyButtonText}
+                </button>
+              )}
             </h2>
             {outputData ? (
               <pre

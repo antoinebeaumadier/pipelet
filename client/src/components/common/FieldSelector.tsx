@@ -36,6 +36,7 @@ const FieldSelector: React.FC<FieldSelectorProps> = ({
         value={selectedValue}
         onChange={onChange}
         className={`${className} square-select`}
+        style={style}
       >
         <option value="">{placeholder}</option>
         {availableFields.map((field) => (

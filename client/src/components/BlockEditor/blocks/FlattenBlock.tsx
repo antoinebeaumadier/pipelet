@@ -78,7 +78,9 @@ const FlattenBlock: React.FC<FlattenBlockProps> = ({ block, onChange }) => {
             />
           </div>
           <div style={{ fontSize: "10px", color: "#666" }}>
-            Character used to separate nested paths (default: _)
+            {block.config.operation === "flatten" 
+              ? "Flattens a nested object structure using this separator (ex: user.address.city → user_address_city)" 
+              : "Character used to separate nested paths when unflattening (default: _)"}
           </div>
         </div>
       )}

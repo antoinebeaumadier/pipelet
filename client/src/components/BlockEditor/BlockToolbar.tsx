@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { BLOCK_TYPES, BlockType } from './types';
+import BLOCK_DESCRIPTIONS from './blockDescriptions';
 
 interface BlockToolbarProps {
   onAddBlock: (type: BlockType) => void;
@@ -13,7 +14,8 @@ const BlockToolbar: React.FC<BlockToolbarProps> = ({ onAddBlock, disabled }) => 
 
   // Filter block types based on search term
   const filteredTypes = BLOCK_TYPES.filter(type => 
-    type.toLowerCase().includes(searchTerm.toLowerCase())
+    type.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (BLOCK_DESCRIPTIONS[type] && BLOCK_DESCRIPTIONS[type].toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   // Close suggestions when clicking outside
@@ -37,7 +39,7 @@ const BlockToolbar: React.FC<BlockToolbarProps> = ({ onAddBlock, disabled }) => 
   };
 
   return (
-    <div ref={searchRef} style={{ position: 'relative', marginTop: '8px', width: '400px' }}>
+    <div ref={searchRef} style={{ position: 'relative', marginTop: '8px', width: '600px' }}>
       <input
         type="text"
         value={searchTerm}
@@ -48,7 +50,7 @@ const BlockToolbar: React.FC<BlockToolbarProps> = ({ onAddBlock, disabled }) => 
         onFocus={() => setShowSuggestions(true)}
         placeholder="Search for a block type..."
         style={{
-          width: '400px',
+          width: '100%',
           boxSizing: 'border-box',
           padding: '8px 12px',
           height: '24px',
@@ -68,13 +70,13 @@ const BlockToolbar: React.FC<BlockToolbarProps> = ({ onAddBlock, disabled }) => 
             position: 'absolute',
             top: '100%',
             left: 0,
-            width: '400px',
+            width: '100%',
             boxSizing: 'border-box',
             backgroundColor: 'white',
             border: '1px solid #d1d5db',
             borderRadius: '4px',
             marginTop: '4px',
-            maxHeight: '200px',
+            maxHeight: '300px',
             overflowY: 'auto',
             zIndex: 1000,
           }}
@@ -84,14 +86,30 @@ const BlockToolbar: React.FC<BlockToolbarProps> = ({ onAddBlock, disabled }) => 
               key={type}
               onClick={() => handleSelectType(type)}
               style={{
-                padding: '4px 12px',
+                padding: '8px 12px',
                 cursor: 'pointer',
                 borderBottom: '1px solid #f3f4f6',
                 fontSize: '12px',
+                display: 'flex',
+                alignItems: 'center',
               }}
               className="block-suggestion-item"
             >
-              {type}
+              <div style={{ fontWeight: 'bold', minWidth: '100px' }}>
+                {type}
+              </div>
+              {BLOCK_DESCRIPTIONS[type] && (
+                <div
+                  style={{
+                    fontSize: '11px',
+                    color: '#666',
+                    marginLeft: '12px',
+                    flex: 1,
+                  }}
+                >
+                  {BLOCK_DESCRIPTIONS[type]}
+                </div>
+              )}
             </div>
           ))}
         </div>

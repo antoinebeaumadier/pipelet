@@ -70,11 +70,11 @@ export function applyBlockLogic(
       case "format": {
         return applyFormatBlock(data, block);
       }
-      case "aggregate": {
-        return applyAggregateBlock(data, block);
+      case "groupBy": {
+        return applyGroupByBlock(data, block);
       }
-      case "structure": {
-        return applyStructureBlock(data, block);
+      case "flatten": {
+        return applyFlattenBlock(data, block);
       }
       case "get": {
         return applyGetBlock(data, block);
@@ -95,7 +95,25 @@ export function applyBlockLogic(
         return applyMapValuesBlock(data, block);
       }
       case "createObject": {
-        return applyCreateObjectBlock(data, block);
+        return applyCreateObjectBlock(data, block, context);
+      }
+      case "createArray": {
+        return applyCreateArrayBlock(data, block, context);
+      }
+      case "keyBy": {
+        return applyKeyByBlock(data, block);
+      }
+      case "keys": {
+        return applyKeysBlock(data, block);
+      }
+      case "values": {
+        return applyValuesBlock(data, block);
+      }
+      case "join": {
+        return applyJoinBlock(data, block);
+      }
+      case "split": {
+        return applySplitBlock(data, block);
       }
       default:
         return data;
@@ -163,6 +181,19 @@ function applyMapBlock(data: any[], block: Block): any[] {
       transformOption
     );
 
+    // Special case for keepOnly transform - return an object with only this field
+    if (transform === "keepOnly") {
+      if (newField?.trim()) {
+        // If newField is specified, use that as the property name
+        return { [newField.trim()]: transformedValue };
+      }
+      
+      // Otherwise use the original field name (getting the last part of the path)
+      const fieldParts = field.split(".");
+      const fieldName = fieldParts[fieldParts.length - 1];
+      return { [fieldName]: transformedValue };
+    }
+
     // If newField is empty, transform the original value in place
     if (!newField?.trim()) {
       return setNestedValue(item, field, transformedValue);
@@ -190,13 +221,91 @@ function applyMapBlock(data: any[], block: Block): any[] {
  */
 function applyConvertBlock(data: any[], block: Block): any[] | string[] {
   const { format } = block.config;
-  if (format === "csv") {
-    if (data.length === 0) return data;
-    const keys = Object.keys(data[0] || {});
-    const rows = data.map((obj) => keys.map((k) => obj[k]).join(","));
-    return [keys.join(","), ...rows];
+  
+  if (!format) return data;
+  
+  try {
+    switch (format) {
+      case "csv": {
+        if (data.length === 0) return data;
+        
+        // Get all unique keys from all objects
+        const keys = Array.from(
+          new Set(
+            data.flatMap((obj) => Object.keys(obj))
+          )
+        );
+
+        // Escape CSV values properly
+        const escapeCsvValue = (value: any): string => {
+          if (value === null || value === undefined) return '';
+          const str = String(value);
+          // If the string contains commas, quotes, or newlines, wrap it in quotes and escape quotes
+          if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+            return `"${str.replace(/"/g, '""')}"`;
+          }
+          return str;
+        };
+
+        // Create header row
+        const headerRow = keys.map(escapeCsvValue).join(',');
+        
+        // Create data rows
+        const rows = data.map((obj) => 
+          keys.map((key) => {
+            const value = obj[key];
+            // Handle nested objects by converting them to JSON strings
+            if (value && typeof value === 'object' && !Array.isArray(value)) {
+              return escapeCsvValue(JSON.stringify(value));
+            }
+            return escapeCsvValue(value);
+          }).join(',')
+        );
+
+        return [headerRow, ...rows];
+      }
+      
+      case "json": {
+        return [JSON.stringify(data, null, 2)];
+      }
+      
+      case "xml": {
+        const convertToXml = (obj: any, rootName: string = 'root'): string => {
+          const convertValue = (value: any): string => {
+            if (value === null || value === undefined) return '';
+            if (typeof value === 'object') {
+              return convertToXml(value, 'item');
+            }
+            return String(value);
+          };
+
+          if (Array.isArray(obj)) {
+            return obj.map(item => convertToXml(item, 'item')).join('');
+          }
+
+          const entries = Object.entries(obj);
+          if (entries.length === 0) return `<${rootName}/>`;
+
+          const content = entries.map(([key, value]) => {
+            if (typeof value === 'object' && value !== null) {
+              return convertToXml(value, key);
+            }
+            return `<${key}>${convertValue(value)}</${key}>`;
+          }).join('');
+
+          return `<${rootName}>${content}</${rootName}>`;
+        };
+
+        return [`<?xml version="1.0" encoding="UTF-8"?>\n${convertToXml(data)}`];
+      }
+      
+      default:
+        return data;
+    }
+  } catch (error) {
+    console.error('Error in convert block:', error);
+    return data;
   }
-  return data;
 }
 
 /**
@@ -239,256 +348,71 @@ function applyFormatBlock(data: any[], block: Block): any[] {
 }
 
 /**
- * Aggregate block implementation
+ * GroupBy block implementation
  */
-function applyAggregateBlock(data: any[], block: Block): any[] {
+function applyGroupByBlock(data: any[], block: Block): any[] {
   const { groupBy, aggregateFields } = block.config;
   
-  if (!groupBy || !groupBy.length || !aggregateFields || !aggregateFields.length) {
+  if (!groupBy) {
     return data;
   }
 
   // Create a map to store grouped data
-  const groupedData = new Map<string, { group: Record<string, any>; items: any[] }>();
+  const groupedData = new Map<string, any[]>();
 
   // Group the data
   data.forEach((item: any) => {
-    const groupKey = groupBy.map(field => getNestedValue(item, field)).join('|');
-    
+    const groupKey = getNestedValue(item, groupBy);
+    if (groupKey === undefined) return;
+
     if (!groupedData.has(groupKey)) {
-      groupedData.set(groupKey, {
-        group: groupBy.reduce((acc: Record<string, any>, field: string) => {
-          acc[field] = getNestedValue(item, field);
-          return acc;
-        }, {}),
-        items: []
-      });
+      groupedData.set(groupKey, []);
     }
-    
-    groupedData.get(groupKey)?.items.push(item);
+    groupedData.get(groupKey)?.push(item);
   });
 
+  // If no aggregations are specified, return the grouped data as an object
+  if (!aggregateFields || !aggregateFields.length) {
+    return [Object.fromEntries(groupedData)];
+  }
+
   // Apply aggregations to each group
-  return Array.from(groupedData.values()).map(({ group, items }) => {
-    const result = { ...group };
+  const result = Array.from(groupedData.entries()).map(([key, items]) => {
+    const groupResult: Record<string, any> = { [groupBy]: key };
     
     aggregateFields.forEach(({ field, operation, newField }) => {
       const values = items.map(item => getNestedValue(item, field));
       
       switch (operation) {
         case 'sum':
-          result[newField] = values.reduce((sum: number, val: any) => sum + (Number(val) || 0), 0);
+          groupResult[newField] = values.reduce((sum: number, val: any) => sum + (Number(val) || 0), 0);
           break;
         case 'average':
           const sum = values.reduce((sum: number, val: any) => sum + (Number(val) || 0), 0);
-          result[newField] = sum / values.length;
+          groupResult[newField] = sum / values.length;
           break;
         case 'count':
-          result[newField] = values.length;
+          groupResult[newField] = values.length;
           break;
         case 'min':
-          result[newField] = Math.min(...values.map((val: any) => Number(val) || Infinity));
+          groupResult[newField] = Math.min(...values.map((val: any) => Number(val) || Infinity));
           break;
         case 'max':
-          result[newField] = Math.max(...values.map((val: any) => Number(val) || -Infinity));
+          groupResult[newField] = Math.max(...values.map((val: any) => Number(val) || -Infinity));
           break;
       }
     });
     
-    return result;
+    return groupResult;
   });
-}
-
-/**
- * Merge block implementation
- */
-function applyMergeBlock(
-  data: any[],
-  block: Block,
-  context?: Record<string, any[]>
-): any[] {
-  // Check if context is available
-  if (!context) return data;
-
-  const { 
-    mergeWith, 
-    mergeStrategy = "combine",
-    joinType = "inner",
-    leftKey,
-    rightKey
-  } = block.config;
-
-  if (!mergeWith || !context[mergeWith]) {
-    // If no secondary source is specified, return original data
-    return data;
-  }
-
-  const dataToMerge = context[mergeWith];
-
-  // If no specific join type is specified, use the old merge strategies
-  if (!joinType) {
-    switch (mergeStrategy) {
-      case "override":
-        // Replace existing records with those from the secondary source
-        // using the first field as join key
-        if (data.length === 0 || dataToMerge.length === 0)
-          return [...data, ...dataToMerge];
-
-        const keyField = Object.keys(data[0])[0];
-        const mergedData = new Map();
-
-        // First add all main data
-        data.forEach((item) => {
-          if (item[keyField]) {
-            mergedData.set(item[keyField], item);
-          }
-        });
-
-        // Then replace/add with data to merge
-        dataToMerge.forEach((item) => {
-          if (item[keyField]) {
-            mergedData.set(item[keyField], item);
-          }
-        });
-
-        return Array.from(mergedData.values());
-
-      case "combine":
-        // Combine fields from both sources
-        if (data.length === 0) return dataToMerge;
-        if (dataToMerge.length === 0) return data;
-
-        // Assumes both arrays have same length and order
-        // If not, a more complex logic would be needed
-        return data.map((item, index) => {
-          if (index < dataToMerge.length) {
-            return { ...item, ...dataToMerge[index] };
-          }
-          return item;
-        });
-
-      case "append":
-        // Simply concatenate both sources
-        return [...data, ...dataToMerge];
-
-      default:
-        return data;
-    }
-  }
-
-  // SQL-like join implementation
-  if (!leftKey || !rightKey) {
-    console.warn("Join keys not specified for SQL-like join");
-    return data;
-  }
-
-  // Helper function to normalize join key values
-  const normalizeValue = (value: any): string => {
-    if (value === null || value === undefined) return '';
-    if (typeof value === 'number') return value.toString();
-    if (typeof value === 'boolean') return value ? '1' : '0';
-    if (typeof value === 'object') return JSON.stringify(value);
-    return String(value);
-  };
-
-  // Create maps for faster lookups
-  const leftMap = new Map();
-  const rightMap = new Map();
-
-  // Build left map
-  data.forEach(item => {
-    const value = getNestedValue(item, leftKey);
-    if (value !== undefined) {
-      const key = normalizeValue(value);
-      if (!leftMap.has(key)) {
-        leftMap.set(key, []);
-      }
-      leftMap.get(key).push(item);
-    }
-  });
-
-  // Build right map
-  dataToMerge.forEach(item => {
-    const value = getNestedValue(item, rightKey);
-    if (value !== undefined) {
-      const key = normalizeValue(value);
-      if (!rightMap.has(key)) {
-        rightMap.set(key, []);
-      }
-      rightMap.get(key).push(item);
-    }
-  });
-
-  const result: any[] = [];
-
-  switch (joinType) {
-    case "inner":
-      // Inner join: only include records that match in both datasets
-      Array.from(leftMap.entries()).forEach(([key, leftItems]) => {
-        if (rightMap.has(key)) {
-          const rightItems = rightMap.get(key);
-          leftItems.forEach((leftItem: Record<string, any>) => {
-            rightItems.forEach((rightItem: Record<string, any>) => {
-              result.push({ ...leftItem, ...rightItem });
-            });
-          });
-        }
-      });
-      break;
-
-    case "left":
-      // Left join: include all records from left dataset, with matching right records if they exist
-      Array.from(leftMap.entries()).forEach(([key, leftItems]) => {
-        const rightItems = rightMap.get(key) || [{}];
-        leftItems.forEach((leftItem: Record<string, any>) => {
-          rightItems.forEach((rightItem: Record<string, any>) => {
-            result.push({ ...leftItem, ...rightItem });
-          });
-        });
-      });
-      break;
-
-    case "right":
-      // Right join: include all records from right dataset, with matching left records if they exist
-      Array.from(rightMap.entries()).forEach(([key, rightItems]) => {
-        const leftItems = leftMap.get(key) || [{}];
-        leftItems.forEach((leftItem: Record<string, any>) => {
-          rightItems.forEach((rightItem: Record<string, any>) => {
-            result.push({ ...leftItem, ...rightItem });
-          });
-        });
-      });
-      break;
-
-    case "full":
-      // Full outer join: include all records from both datasets
-      const allKeys = new Set([
-        ...Array.from(leftMap.keys()),
-        ...Array.from(rightMap.keys())
-      ]);
-      Array.from(allKeys).forEach(key => {
-        const leftItems = leftMap.get(key) || [{}];
-        const rightItems = rightMap.get(key) || [{}];
-        leftItems.forEach((leftItem: Record<string, any>) => {
-          rightItems.forEach((rightItem: Record<string, any>) => {
-            result.push({ ...leftItem, ...rightItem });
-          });
-        });
-      });
-      break;
-
-    default:
-      console.warn(`Unknown join type: ${joinType}`);
-      return data;
-  }
 
   return result;
 }
 
 /**
- * Structure block implementation
+ * Flatten block implementation
  */
-function applyStructureBlock(data: any[], block: Block): any[] {
+function applyFlattenBlock(data: any[], block: Block): any[] {
   const { operation, template = '{}', separator = '_' } = block.config;
 
   switch (operation) {
@@ -496,6 +420,14 @@ function applyStructureBlock(data: any[], block: Block): any[] {
       return data.map(item => flattenObject(item, separator));
     case 'unflatten':
       return data.map(item => unflattenObject(item, separator));
+    case 'flattenArray':
+      return data.flatMap(item => {
+        // Only flatten if the item is an array of arrays
+        if (Array.isArray(item) && item.some(Array.isArray)) {
+          return item.flat();
+        }
+        return item;
+      });
     case 'restructure':
       return data.map(item => restructureObject(item, template));
     default:
@@ -775,9 +707,133 @@ function applyMapValuesBlock(data: any[], block: Block): any[] {
   });
 }
 
-function applyCreateObjectBlock(data: any[], block: Block): any[] {
+/**
+ * Evaluate references to previous step values in a string
+ * Rules:
+ * - $ prefix is required for all variable references: $stepName, $input
+ * - Dot notation after $input maps across all items (returns array)
+ * - Array indexing is supported: $stepName[index].property, $input[index].property
+ */
+function evaluateStepReference(value: string, context?: Record<string, any[]>): any {
+  if (!context || typeof value !== 'string') {
+    return value;
+  }
+
+  console.log("Evaluating reference:", value);
+
+  // Check for $input with dot notation (should map all items)
+  if (value.startsWith('$input.')) {
+    const fieldPath = value.slice(7); // Remove '$input.'
+    if (context.input && context.input.length > 0) {
+      // Map all items in input array to get the specified field from each
+      return context.input.map(item => getNestedValue(item, fieldPath));
+    }
+    return value;
+  }
+
+  // Check for $input with array index: $input[0].property
+  const inputArrayRegex = /^\$input\[(\d+)\]((?:\.\w+|\[\d+\])*)$/;
+  const inputMatch = value.match(inputArrayRegex);
+  
+  if (inputMatch) {
+    const [, indexStr, remainingPath = ''] = inputMatch;
+    const index = parseInt(indexStr, 10);
+    
+    if (context.input && Array.isArray(context.input) && context.input.length > index) {
+      let current = context.input[index];
+      
+      // If no remaining path, return the whole object at this index
+      if (!remainingPath) {
+        return current;
+      }
+      
+      // Process the remaining path
+      return processPath(current, remainingPath, value);
+    }
+    return value;
+  }
+
+  // Check for $stepName with array index: $stepName[index].property
+  const stepArrayRegex = /^\$([a-zA-Z0-9_]+)\[(\d+)\]((?:\.\w+|\[\d+\])*)$/;
+  const stepArrayMatch = value.match(stepArrayRegex);
+  
+  if (stepArrayMatch) {
+    const [, stepName, indexStr, remainingPath = ''] = stepArrayMatch;
+    const index = parseInt(indexStr, 10);
+    
+    if (context[stepName] && Array.isArray(context[stepName]) && context[stepName].length > index) {
+      let current = context[stepName][index];
+      
+      // If no remaining path, return the whole object at this index
+      if (!remainingPath) {
+        return current;
+      }
+      
+      // Process the remaining path
+      return processPath(current, remainingPath, value);
+    }
+    return value;
+  }
+
+  // Check for $stepName with dot notation: $stepName.property
+  const stepRefRegex = /^\$([a-zA-Z0-9_]+)\.([\w\.]+)$/;
+  const stepMatch = value.match(stepRefRegex);
+  
+  if (stepMatch) {
+    const [, stepName, fieldPath] = stepMatch;
+    
+    if (context[stepName] && context[stepName].length > 0) {
+      // Get the field from the first item in the step
+      return getNestedValue(context[stepName][0], fieldPath);
+    }
+    return value;
+  }
+  
+  return value;
+}
+
+/**
+ * Helper function to process a path with dots and array indices
+ */
+function processPath(current: any, path: string, originalValue: string): any {
+  if (!path) return current;
+  
+  const pathParts = path.split(/(?=\[|\.)/).map(part => part.replace(/^\./, ''));
+  
+  for (const part of pathParts) {
+    if (!part) continue;
+    
+    // Handle array indexing
+    if (part.match(/^\[\d+\]$/)) {
+      const index = parseInt(part.slice(1, -1), 10);
+      if (Array.isArray(current)) {
+        current = current[index];
+      } else {
+        console.warn(`Invalid path: tried to access index ${index} on non-array:`, current);
+        return originalValue;
+      }
+    } 
+    // Handle regular property access
+    else {
+      if (current && typeof current === 'object') {
+        current = current[part];
+      } else {
+        console.warn(`Invalid path: tried to access property ${part} on non-object:`, current);
+        return originalValue;
+      }
+    }
+    
+    if (current === undefined || current === null) {
+      return originalValue;
+    }
+  }
+  
+  return current;
+}
+
+function applyCreateObjectBlock(data: any[], block: Block, context?: Record<string, any[]>): any[] {
   const { objectTemplate } = block.config;
-  if (!objectTemplate) return data;
+  if (!objectTemplate) return [];
 
   const createObject = (template: any) => {
     const result: Record<string, any> = {};
@@ -786,12 +842,527 @@ function applyCreateObjectBlock(data: any[], block: Block): any[] {
       if (item.isNested && item.children) {
         result[item.key] = createObject(item.children);
       } else {
-        result[item.key] = item.value;
+        // Evaluate potential step references in the value
+        result[item.key] = evaluateStepReference(item.value, context);
       }
     });
     
     return result;
   };
 
-  return data.map(() => createObject(objectTemplate));
+  return [createObject(objectTemplate)];
+}
+
+function applyCreateArrayBlock(data: any[], block: Block, context?: Record<string, any[]>): any[] {
+  const { arrayTemplate } = block.config;
+  if (!arrayTemplate) return [];
+
+  // Convert string values to their appropriate types and evaluate references
+  const result = arrayTemplate.map(item => {
+    // First check if it's a reference to a previous step
+    const evaluatedValue = evaluateStepReference(item.value, context);
+    
+    // If it's the same as the original, try to parse as JSON
+    if (evaluatedValue === item.value) {
+      try {
+        // Try to parse as JSON first
+        return JSON.parse(item.value);
+      } catch (e) {
+        // If not valid JSON, return as string
+        return item.value;
+      }
+    }
+    
+    // Return the evaluated value
+    return evaluatedValue;
+  });
+
+  return result;
+}
+
+/**
+ * Deep merge two objects
+ */
+function deepMerge(target: any, source: any): any {
+  if (typeof target !== 'object' || typeof source !== 'object') {
+    return source;
+  }
+
+  const result = { ...target };
+  
+  Object.keys(source).forEach(key => {
+    if (source[key] instanceof Object && key in target) {
+      result[key] = deepMerge(target[key], source[key]);
+    } else {
+      result[key] = source[key];
+    }
+  });
+
+  return result;
+}
+
+/**
+ * Merge block implementation
+ */
+function applyMergeBlock(
+  data: any[],
+  block: Block,
+  context?: Record<string, any[]>
+): any[] {
+  // Check if context is available
+  if (!context) return data;
+
+  const { 
+    mergeWith, 
+    mergeStrategy = "combine",
+    joinType = "inner",
+    leftKey,
+    rightKey
+  } = block.config;
+
+  if (!mergeWith || !context[mergeWith]) {
+    // If no secondary source is specified, return original data
+    return data;
+  }
+
+  const dataToMerge = context[mergeWith];
+
+  // If no specific join type is specified, use the old merge strategies
+  if (!joinType) {
+    switch (mergeStrategy) {
+      case "override":
+        // Replace existing records with those from the secondary source
+        // using the first field as join key
+        if (data.length === 0 || dataToMerge.length === 0)
+          return [...data, ...dataToMerge];
+
+        const keyField = Object.keys(data[0])[0];
+        const mergedData = new Map();
+
+        // First add all main data
+        data.forEach((item) => {
+          if (item[keyField]) {
+            mergedData.set(item[keyField], item);
+          }
+        });
+
+        // Then replace/add with data to merge
+        dataToMerge.forEach((item) => {
+          if (item[keyField]) {
+            mergedData.set(item[keyField], item);
+          }
+        });
+
+        return Array.from(mergedData.values());
+
+      case "combine":
+        if (!Array.isArray(data) || !Array.isArray(dataToMerge)) {
+          console.warn("Invalid input: both datasets must be arrays");
+          return data;
+        }
+        if (data.length === 0) return dataToMerge;
+        if (dataToMerge.length === 0) return data;
+
+        // Use a configurable join key instead of the first field
+        const combineJoinKey = block.config.joinKey || Object.keys(data[0])[0];
+        
+        const combineDataMap = new Map();
+        data.forEach(item => {
+          const key = getNestedValue(item, combineJoinKey);
+          if (key !== undefined) {
+            combineDataMap.set(key, item);
+          }
+        });
+
+        return dataToMerge.map(item => {
+          const key = getNestedValue(item, combineJoinKey);
+          if (key !== undefined && combineDataMap.has(key)) {
+            return deepMerge(combineDataMap.get(key), item);
+          }
+          return item;
+        });
+
+      case "append":
+        if (!Array.isArray(data) || !Array.isArray(dataToMerge)) {
+          console.warn("Invalid input: both datasets must be arrays");
+          return data;
+        }
+        return [...data, ...dataToMerge];
+
+      case "union":
+        if (!Array.isArray(data) || !Array.isArray(dataToMerge)) {
+          console.warn("Invalid input: both datasets must be arrays");
+          return data;
+        }
+        if (data.length === 0) return dataToMerge;
+        if (dataToMerge.length === 0) return data;
+
+        // Use a configurable join key
+        const unionJoinKey = block.config.joinKey || Object.keys(data[0])[0];
+        
+        // Create maps for both datasets
+        const unionDataMap = new Map();
+        const unionMergeMap = new Map();
+        
+        // Build maps for both datasets
+        data.forEach(item => {
+          const key = getNestedValue(item, unionJoinKey);
+          if (key !== undefined) {
+            unionDataMap.set(key, item);
+          }
+        });
+
+        dataToMerge.forEach(item => {
+          const key = getNestedValue(item, unionJoinKey);
+          if (key !== undefined) {
+            unionMergeMap.set(key, item);
+          }
+        });
+
+        // Get all unique keys from both datasets
+        const allKeys = new Set([
+          ...Array.from(unionDataMap.keys()),
+          ...Array.from(unionMergeMap.keys())
+        ]);
+        
+        // Process each key
+        return Array.from(allKeys).map(key => {
+          const leftItem = unionDataMap.get(key);
+          const rightItem = unionMergeMap.get(key);
+          
+          if (leftItem && rightItem) {
+            // If both datasets have the item, deep merge them
+            return deepMerge(leftItem, rightItem);
+          } else if (leftItem) {
+            // If only left dataset has the item, use it
+            return leftItem;
+          } else {
+            // If only right dataset has the item, use it
+            return rightItem;
+          }
+        });
+
+      default:
+        return data;
+    }
+  }
+
+  // SQL-like join implementation
+  if (!leftKey || !rightKey) {
+    console.warn("Join keys not specified for SQL-like join");
+    return data;
+  }
+
+  // Helper function to normalize join key values
+  const normalizeValue = (value: any): string => {
+    if (value === null || value === undefined) return '';
+    if (typeof value === 'number') return value.toString();
+    if (typeof value === 'boolean') return value ? '1' : '0';
+    if (typeof value === 'object') return JSON.stringify(value);
+    return String(value);
+  };
+
+  // Create maps for faster lookups
+  const leftMap = new Map();
+  const rightMap = new Map();
+
+  // Build left map
+  data.forEach(item => {
+    const value = getNestedValue(item, leftKey);
+    if (value !== undefined) {
+      const key = normalizeValue(value);
+      if (!leftMap.has(key)) {
+        leftMap.set(key, []);
+      }
+      leftMap.get(key).push(item);
+    }
+  });
+
+  // Build right map
+  dataToMerge.forEach(item => {
+    const value = getNestedValue(item, rightKey);
+    if (value !== undefined) {
+      const key = normalizeValue(value);
+      if (!rightMap.has(key)) {
+        rightMap.set(key, []);
+      }
+      rightMap.get(key).push(item);
+    }
+  });
+
+  const result: any[] = [];
+
+  switch (joinType) {
+    case "inner":
+      // Inner join: only include records that match in both datasets
+      Array.from(leftMap.entries()).forEach(([key, leftItems]) => {
+        if (rightMap.has(key)) {
+          const rightItems = rightMap.get(key);
+          leftItems.forEach((leftItem: Record<string, any>) => {
+            rightItems.forEach((rightItem: Record<string, any>) => {
+              result.push({ ...leftItem, ...rightItem });
+            });
+          });
+        }
+      });
+      break;
+
+    case "left":
+      // Left join: include all records from left dataset, with matching right records if they exist
+      Array.from(leftMap.entries()).forEach(([key, leftItems]) => {
+        const rightItems = rightMap.get(key) || [{}];
+        leftItems.forEach((leftItem: Record<string, any>) => {
+          rightItems.forEach((rightItem: Record<string, any>) => {
+            result.push({ ...leftItem, ...rightItem });
+          });
+        });
+      });
+      break;
+
+    case "right":
+      // Right join: include all records from right dataset, with matching left records if they exist
+      Array.from(rightMap.entries()).forEach(([key, rightItems]) => {
+        const leftItems = leftMap.get(key) || [{}];
+        leftItems.forEach((leftItem: Record<string, any>) => {
+          rightItems.forEach((rightItem: Record<string, any>) => {
+            result.push({ ...leftItem, ...rightItem });
+          });
+        });
+      });
+      break;
+
+    case "full":
+      // Full outer join: include all records from both datasets
+      const allKeys = new Set([
+        ...Array.from(leftMap.keys()),
+        ...Array.from(rightMap.keys())
+      ]);
+      Array.from(allKeys).forEach(key => {
+        const leftItems = leftMap.get(key) || [{}];
+        const rightItems = rightMap.get(key) || [{}];
+        leftItems.forEach((leftItem: Record<string, any>) => {
+          rightItems.forEach((rightItem: Record<string, any>) => {
+            result.push({ ...leftItem, ...rightItem });
+          });
+        });
+      });
+      break;
+
+    default:
+      console.warn(`Unknown join type: ${joinType}`);
+      return data;
+  }
+
+  return result;
+}
+
+/**
+ * KeyBy block implementation
+ */
+function applyKeyByBlock(data: any[], block: Block): any[] {
+  const { keyField } = block.config;
+  if (!keyField) return data;
+
+  const result: Record<string, any> = {};
+
+  data.forEach((item) => {
+    const key = getNestedValue(item, keyField);
+    if (key !== undefined && !result.hasOwnProperty(key)) {
+      result[key] = item;
+    }
+  });
+
+  return [result];
+}
+
+function applyKeysBlock(data: any[], block: Block): any[] {
+  if (!data || data.length === 0) return [];
+  
+  const { field, recursive } = block.config;
+  
+  // Create a function to collect keys recursively if needed
+  const collectKeys = (obj: any, recursive: boolean): string[] => {
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
+      return [];
+    }
+    
+    const keys = Object.keys(obj);
+    
+    if (!recursive) {
+      return keys;
+    }
+    
+    // If recursive, also collect keys from nested objects
+    const allKeys = new Set(keys);
+    
+    for (const key of keys) {
+      const value = obj[key];
+      if (value && typeof value === 'object' && !Array.isArray(value)) {
+        const nestedKeys = collectKeys(value, true)
+          .map(nestedKey => `${key}.${nestedKey}`);
+        
+        nestedKeys.forEach(nestedKey => allKeys.add(nestedKey));
+      }
+    }
+    
+    return Array.from(allKeys);
+  };
+  
+  return data.map(item => {
+    // If a field is specified, get keys for that field
+    // Otherwise, get keys for the entire item
+    const targetObj = field ? getNestedValue(item, field) : item;
+    return collectKeys(targetObj, !!recursive);
+  });
+}
+
+function applyValuesBlock(data: any[], block: Block): any[] {
+  if (!data || data.length === 0) return [];
+  
+  const { field, valuesRecursive } = block.config;
+  
+  // Create a function to collect values recursively if needed
+  const collectValues = (obj: any, recursive: boolean): any[] => {
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
+      return [];
+    }
+    
+    const values = Object.values(obj);
+    
+    if (!recursive) {
+      return values;
+    }
+    
+    // If recursive, also collect values from nested objects
+    const allValues: any[] = [];
+    
+    // First add all direct values
+    for (const value of values) {
+      // Only add non-object values directly
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        allValues.push(value);
+      } else {
+        // For objects, get their values recursively
+        const nestedValues = collectValues(value, true);
+        allValues.push(...nestedValues);
+      }
+    }
+    
+    return allValues;
+  };
+  
+  return data.map(item => {
+    // If a field is specified, get values for that field
+    // Otherwise, get values for the entire item
+    const targetObj = field ? getNestedValue(item, field) : item;
+    return collectValues(targetObj, !!valuesRecursive);
+  });
+}
+
+/**
+ * Join block implementation
+ * Concatenates array items into a string with an optional separator
+ */
+function applyJoinBlock(data: any[], block: Block): any[] {
+  const { separator = "" } = block.config;
+  
+  if (!Array.isArray(data)) {
+    return [String(data)];
+  }
+  
+  // Handle both array of primitives and array of objects
+  if (data.length > 0 && typeof data[0] === 'object' && data[0] !== null) {
+    // For array of objects, convert each object to string (JSON format)
+    const stringValues = data.map(item => JSON.stringify(item));
+    return [stringValues.join(separator)];
+  } else {
+    // For array of primitives, simply join them
+    return [data.join(separator)];
+  }
+}
+
+/**
+ * Split block implementation
+ * Divides a string into an array of substrings using a separator
+ */
+function applySplitBlock(data: any[], block: Block): any[] {
+  console.log('Applying split block with config:', JSON.stringify(block.config));
+  console.log('Input data first item:', data.length > 0 ? JSON.stringify(data[0]) : 'No data');
+  
+  return data.map(item => {
+    // Deep clone the original item to prevent reference issues
+    const result = JSON.parse(JSON.stringify(item));
+    const field = block.config.field || '';
+    
+    // Get the value to split
+    let valueToSplit = '';
+    if (field) {
+      const fieldValue = getNestedValue(item, field);
+      if (fieldValue !== undefined) {
+        valueToSplit = String(fieldValue);
+        console.log(`Found field value "${field}":`, valueToSplit);
+      } else {
+        console.log(`Field "${field}" not found in item:`, JSON.stringify(item));
+        return result; // Return unchanged if field not found
+      }
+    } else {
+      valueToSplit = JSON.stringify(item);
+    }
+    
+    console.log(`Value to split: "${valueToSplit}"`);
+    
+    // Determine how to split the value
+    let splitResult: string[] = [];
+    
+    // Option 1: Split into individual characters
+    if (block.config.splitCharacters) {
+      splitResult = valueToSplit.split('');
+      console.log('Split into characters:', splitResult);
+    } 
+    // Option 2: Split by whitespace (default case) - when separator is unspecified or empty
+    else if (block.config.separator === undefined || block.config.separator === '') {
+      splitResult = valueToSplit.trim().split(/\s+/);
+      console.log('Split by whitespace:', splitResult);
+    } 
+    // Option 3: Split by specified separator
+    else {
+      console.log(`Using separator: "${block.config.separator}"`);
+      splitResult = valueToSplit.split(block.config.separator);
+      console.log('Split by separator:', splitResult);
+    }
+    
+    // Set the result back to the field
+    if (field) {
+      // Split the field path into parts
+      const fieldParts = field.split('.');
+      
+      // Handle nested fields directly for better debugging
+      if (fieldParts.length > 1) {
+        let current = result;
+        
+        // Navigate to the parent object of the target field
+        for (let i = 0; i < fieldParts.length - 1; i++) {
+          const part = fieldParts[i];
+          if (current[part] === undefined) {
+            current[part] = {};
+          }
+          current = current[part];
+        }
+        
+        // Set the value at the last level
+        const lastPart = fieldParts[fieldParts.length - 1];
+        current[lastPart] = splitResult;
+        console.log(`Directly set nested field "${field}" to:`, splitResult);
+      } else {
+        // Use setNestedValue for simple fields
+        result[field] = splitResult;
+        console.log(`Set field "${field}" to:`, splitResult);
+      }
+      
+      console.log('Result after setting value:', JSON.stringify(result));
+      return result;
+    } else {
+      return splitResult;
+    }
+  });
 }

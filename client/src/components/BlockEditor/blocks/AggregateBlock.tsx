@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
 import { Block } from '../types';
 
-interface AggregateBlockProps {
+interface GroupByBlockProps {
   block: Block;
   allFields: string[];
   inputData: any[] | null;
   onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => void;
 }
 
-const AggregateBlock: React.FC<AggregateBlockProps> = ({ block, onChange, allFields, inputData }) => {
+const GroupByBlock: React.FC<GroupByBlockProps> = ({ block, onChange, allFields, inputData }) => {
   const [aggregateFields, setAggregateFields] = useState(
     block.config.aggregateFields || [{ field: '', operation: 'sum', newField: '' }]
   );
@@ -68,7 +68,7 @@ const AggregateBlock: React.FC<AggregateBlockProps> = ({ block, onChange, allFie
     onChange({
       target: {
         name: 'groupBy',
-        value: [e.target.value],
+        value: e.target.value,
       },
     } as any);
   };
@@ -95,7 +95,7 @@ const AggregateBlock: React.FC<AggregateBlockProps> = ({ block, onChange, allFie
         </label>
         <select
           name="groupBy"
-          value={block.config.groupBy?.[0] || ''}
+          value={block.config.groupBy || ''}
           onChange={handleGroupByChange}
           style={{
             width: "120px",
@@ -131,7 +131,7 @@ const AggregateBlock: React.FC<AggregateBlockProps> = ({ block, onChange, allFie
           }}
         >
           <label style={{ fontSize: "12px" }}>
-            Aggregate:
+            Aggregate (optional):
           </label>
           <button
             onClick={handleAddAggregateField}
@@ -200,6 +200,7 @@ const AggregateBlock: React.FC<AggregateBlockProps> = ({ block, onChange, allFie
               <option value="max">Max</option>
             </select>
             <input
+              type="text"
               placeholder="New name"
               value={field.newField}
               onChange={(e) => handleAggregateFieldChange(index, 'newField', e.target.value)}
@@ -236,4 +237,4 @@ const AggregateBlock: React.FC<AggregateBlockProps> = ({ block, onChange, allFie
   );
 };
 
-export default AggregateBlock; 
+export default GroupByBlock; 

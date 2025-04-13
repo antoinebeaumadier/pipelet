@@ -77,7 +77,7 @@ const MapBlock: React.FC<MapBlockProps> = ({ block, onChange, allFields, inputDa
             onChange={onChange}
             style={{
               width: "100px",
-              minWidth: "100px",
+              minWidth: "50px",
               height: "20px",
               padding: "0px 8px",
               fontSize: "12px",
@@ -116,6 +116,36 @@ const MapBlock: React.FC<MapBlockProps> = ({ block, onChange, allFields, inputDa
               fontSize: "12px",
             }}
           />
+          {block.config.newField && (
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "row",
+                gap: "4px",
+                alignItems: "center",
+                marginLeft: "8px"
+              }}
+            >
+              <input
+                type="checkbox"
+                id={`keepNested-${block.id}`}
+                name="keepNestedStructure"
+                checked={block.config.keepNestedStructure || false}
+                onChange={handleCheckboxChange}
+                style={{
+                  margin: 0,
+                  width: "14px",
+                  height: "14px",
+                }}
+              />
+              <label
+                htmlFor={`keepNested-${block.id}`}
+                style={{ fontSize: "12px" }}
+              >
+                Keep nested
+              </label>
+            </div>
+          )}
         </div>
 
         <div
@@ -135,13 +165,14 @@ const MapBlock: React.FC<MapBlockProps> = ({ block, onChange, allFields, inputDa
             onChange={onChange}
             style={{
               width: "100px",
-              minWidth: "100px",
+              minWidth: "150px",
               height: "20px",
               padding: "0px 8px",
               fontSize: "12px",
             }}
           >
             <option value="">None</option>
+            <option value="keepOnly">Keep only this field</option>
             <option value="uppercase">Uppercase</option>
             <option value="lowercase">Lowercase</option>
             <option value="number">Number</option>
@@ -150,7 +181,7 @@ const MapBlock: React.FC<MapBlockProps> = ({ block, onChange, allFields, inputDa
             <option value="math">Math</option>
             <option value="format">Format</option>
             <option value="extract">Extract</option>
-            <option value="replicate">Replicate</option>
+            <option value="replicate">Repeat</option>
             <option value="array-join">Array Join</option>
             <option value="array-filter">Array Filter</option>
             <option value="array-map">Array Map</option>
@@ -363,30 +394,100 @@ const MapBlock: React.FC<MapBlockProps> = ({ block, onChange, allFields, inputDa
 
       <div
         style={{
-          display: "flex",
-          flexDirection: "row",
-          gap: "4px",
-          alignItems: "center",
+          fontSize: "11px",
+          color: "#666",
+          marginTop: "0px",
         }}
       >
-        <input
-          type="checkbox"
-          id={`keepNested-${block.id}`}
-          name="keepNestedStructure"
-          checked={block.config.keepNestedStructure || false}
-          onChange={handleCheckboxChange}
-          style={{
-            margin: 0,
-            width: "14px",
-            height: "14px",
-          }}
-        />
-        <label
-          htmlFor={`keepNested-${block.id}`}
-          style={{ fontSize: "12px" }}
-        >
-          Keep nested
-        </label>
+        {block.config.transform === "keepOnly" && (
+          <div>
+            This will create a new object containing only the selected field, removing all other fields.
+          </div>
+        )}
+        
+        {block.config.transform === "uppercase" && (
+          <div>
+            Converts text to UPPERCASE. Example: "hello" {'->'} "HELLO"
+          </div>
+        )}
+        
+        {block.config.transform === "lowercase" && (
+          <div>
+            Converts text to lowercase. Example: "HELLO" {'->'} "hello"
+          </div>
+        )}
+        
+        {block.config.transform === "number" && (
+          <div>
+            Converts value to a number. Example: "123" {'->'} 123
+          </div>
+        )}
+        
+        {block.config.transform === "string" && (
+          <div>
+            Converts value to text. Example: 123 {'->'} "123"
+          </div>
+        )}
+        
+        {block.config.transform === "round" && (
+          <div>
+            Rounds a number to specified decimal places. Example with 2 decimals: 3.14159 {'->'} 3.14
+          </div>
+        )}
+        
+        {block.config.transform === "math" && (
+          <div>
+            Performs math operations on the value. Use "value" variable in formula. Example: "value * 2" doubles the number.
+          </div>
+        )}
+        
+        {block.config.transform === "format" && (
+          <div>
+            Creates formatted text with value. Use {'{'}value{'}'} as placeholder. Example: "Price: {'{'}value{'}'} €" {'->'} "Price: 10 €"
+          </div>
+        )}
+        
+        {block.config.transform === "extract" && (
+          <div>
+            Extracts part of text using start:end syntax. Example: "0:5" on "Hello World" {'->'} "Hello"
+          </div>
+        )}
+        
+        {block.config.transform === "replicate" && (
+          <div>
+            Repeats value multiple times. Example with 3: "abc" {'->'} "abcabcabc"
+          </div>
+        )}
+        
+        {block.config.transform === "array-join" && (
+          <div>
+            Joins array elements into text. Specify separator. Example with ", ": [1,2,3] {'->'} "1, 2, 3"
+          </div>
+        )}
+        
+        {block.config.transform === "array-filter" && (
+          <div>
+            Filters array elements. Use "item" variable in condition. Example: "item {'>'} 2" keeps only values {'>'} 2.
+          </div>
+        )}
+        
+        {block.config.transform === "array-map" && (
+          <div>
+            Transforms each array element. Use "item" variable. Example: "item * 2" doubles each element.
+          </div>
+        )}
+        
+        {block.config.transform === "array-reduce" && (
+          <div>
+            Combines array elements into single value. Use "acc" (accumulator) and "item". Example: "acc + item" sums all elements.
+          </div>
+        )}
+        
+        {block.config.transform === "date-format" && (
+          <div>
+            Formats date strings. Use YYYY (year), MM (month), DD (day), HH (hour), mm (minute), ss (second).
+          </div>
+        )}
       </div>
     </div>
   );

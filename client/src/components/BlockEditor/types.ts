@@ -1,5 +1,5 @@
 // Define block types
-export const BLOCK_TYPES = ["filter", "map", "convert", "sort", "merge", "format", "aggregate", "structure", "get", "reverse", "pick", "mapObject", "mapKeys", "mapValues", "createObject"] as const;
+export const BLOCK_TYPES = ["filter", "map", "convert", "sort", "merge", "format", "groupBy", "flatten", "get", "reverse", "pick", "mapObject", "mapKeys", "mapValues", "createObject", "createArray", "keyBy", "keys", "values", "join", "split"] as const;
 export type BlockType = (typeof BLOCK_TYPES)[number];
 
 export interface ObjectTemplateItem {
@@ -7,6 +7,10 @@ export interface ObjectTemplateItem {
   value: string;
   isNested?: boolean;
   children?: ObjectTemplateItem[];
+}
+
+export interface ArrayTemplateItem {
+  value: string;
 }
 
 // Configuration for different block types
@@ -20,14 +24,15 @@ export interface BlockConfig {
   transformOption?: string;
   keepNestedStructure?: boolean;
   mergeWith?: string;
-  mergeStrategy?: "override" | "combine" | "append";
+  mergeStrategy?: "override" | "combine" | "append" | "union";
   joinType?: "inner" | "left" | "right" | "full";
   leftKey?: string;
   rightKey?: string;
+  joinKey?: string;
   template?: string;
   keepOriginal?: boolean;
-  // Aggregate block specific config
-  groupBy?: string[];
+  // GroupBy block specific config
+  groupBy?: string;
   aggregateFields?: {
     field: string;
     operation: "sum" | "average" | "count" | "min" | "max";
@@ -36,7 +41,7 @@ export interface BlockConfig {
   condition?: string;
   typeCheck?: string;
   // Structure block specific config
-  operation?: "flatten" | "unflatten" | "restructure";
+  operation?: "flatten" | "unflatten" | "restructure" | "flattenArray";
   separator?: string;
   // Get block specific config
   path?: string;
@@ -51,6 +56,16 @@ export interface BlockConfig {
   valueCallback?: string;
   // CreateObject block specific config
   objectTemplate?: ObjectTemplateItem[];
+  // CreateArray block specific config
+  arrayTemplate?: ArrayTemplateItem[];
+  // KeyBy block specific config
+  keyField?: string;
+  // Keys block specific config
+  recursive?: boolean;
+  // Values block specific config
+  valuesRecursive?: boolean;
+  // Split block specific config
+  splitCharacters?: boolean;
 }
 
 // Block structure
