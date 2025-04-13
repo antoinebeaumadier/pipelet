@@ -140,8 +140,8 @@ export function applyBlockLogic(
       case "regex": {
         return applyRegexBlock(data, block);
       }
-      case "csv": {
-        return applyCsvBlock(data, block);
+      case "validate": {
+        return applyValidateBlock(data, block);
       }
       default:
         return data;
@@ -1981,4 +1981,562 @@ function applyCsvBlock(data: any[], block: Block): string[] {
   }
 
   return [csvContent];
+}
+
+/**
+ * Validate block implementation
+ */
+function applyValidateBlock(data: any[], block: Block): any[] {
+  const { 
+    validationType, 
+    schema, 
+    rules, 
+    typeCheck, 
+    field, 
+    pattern, 
+    flags = "", 
+    min, 
+    max, 
+    failOnError = false, 
+    addValidationFields = false 
+  } = block.config;
+  
+  if (!validationType) return data;
+  
+  try {
+    switch (validationType) {
+      case 'schema': 
+        return validateWithSchema(data, schema || '', addValidationFields, failOnError);
+      
+      case 'rule': 
+        return validateWithRules(data, rules || [], addValidationFields, failOnError);
+      
+      case 'type': 
+        return validateWithTypeCheck(data, typeCheck || '', addValidationFields, failOnError);
+      
+      case 'pattern': 
+        return validateWithPattern(data, field || '', pattern || '', flags, addValidationFields, failOnError);
+      
+      case 'range': 
+        return validateWithRange(data, field || '', min, max, addValidationFields, failOnError);
+      
+      case 'custom': 
+        return validateWithCustom(data, block.config.transform || '', addValidationFields, failOnError);
+      
+      case 'required':
+        return validateWithRequired(data, rules || [], addValidationFields, failOnError);
+      
+      default:
+        return data;
+    }
+  } catch (error) {
+    console.error(`Error in ${validationType} validation:`, error);
+    block.hasError = true;
+    return failOnError ? [] : data;
+  }
+}
+
+// Helper function to validate with JSON schema
+function validateWithSchema(data: any[], schema: string, addValidationFields: boolean, failOnError: boolean): any[] {
+  if (!schema) return data;
+  
+  try {
+    const jsonSchema = JSON.parse(schema);
+    
+    return data.map(item => {
+      const validationResult = {
+        valid: true,
+        errors: [] as string[]
+      };
+      
+      function validateObject(obj: any, schemaObj: any, path: string = '') {
+        // Check required properties
+        if (schemaObj.required && Array.isArray(schemaObj.required)) {
+          for (const prop of schemaObj.required) {
+            const fullPath = path ? `${path}.${prop}` : prop;
+            if (obj[prop] === undefined) {
+              validationResult.valid = false;
+              validationResult.errors.push(`Missing required property: ${fullPath}`);
+            }
+          }
+        }
+        
+        // Check property types
+        if (schemaObj.properties && typeof schemaObj.properties === 'object') {
+          for (const [prop, propSchema] of Object.entries(schemaObj.properties)) {
+            const fullPath = path ? `${path}.${prop}` : prop;
+            if (obj[prop] !== undefined) {
+              const propType = (propSchema as any)?.type;
+              
+              if (propType === 'object' && (propSchema as any).properties) {
+                // Recursively validate nested objects
+                validateObject(obj[prop], propSchema as any, fullPath);
+              } else if (propType && typeof propType === 'string') {
+                let typeValid = false;
+                
+                switch (propType) {
+                  case 'string':
+                    typeValid = typeof obj[prop] === 'string';
+                    break;
+                  case 'number':
+                    typeValid = typeof obj[prop] === 'number';
+                    break;
+                  case 'integer':
+                    typeValid = Number.isInteger(Number(obj[prop]));
+                    break;
+                  case 'boolean':
+                    typeValid = typeof obj[prop] === 'boolean';
+                    break;
+                  case 'array':
+                    typeValid = Array.isArray(obj[prop]);
+                    break;
+                  case 'object':
+                    typeValid = typeof obj[prop] === 'object' && obj[prop] !== null && !Array.isArray(obj[prop]);
+                    break;
+                  case 'null':
+                    typeValid = obj[prop] === null;
+                    break;
+                }
+                
+                if (!typeValid) {
+                  validationResult.valid = false;
+                  validationResult.errors.push(`Property '${fullPath}' should be of type '${propType}'`);
+                }
+              }
+            }
+          }
+        }
+      }
+      
+      validateObject(item, jsonSchema);
+      
+      if (addValidationFields) {
+        return {
+          ...item,
+          __valid: validationResult.valid,
+          __errors: validationResult.errors
+        };
+      }
+      
+      return failOnError && !validationResult.valid ? null : item;
+    }).filter(item => item !== null);
+  } catch (error) {
+    console.error('Error validating with schema:', error);
+    return failOnError ? [] : data;
+  }
+}
+
+// Helper function to validate with rules
+function validateWithRules(data: any[], rules: any[], addValidationFields: boolean, failOnError: boolean): any[] {
+  if (!rules || !Array.isArray(rules) || rules.length === 0) return data;
+  
+  return data.map(item => {
+    const validationResults: {
+      field: string;
+      valid: boolean;
+      errorMessage?: string;
+    }[] = [];
+    
+    let isValid = true;
+    
+    for (const ruleConfig of rules) {
+      const { field, rule, errorMessage } = ruleConfig;
+      
+      if (!field || !rule) continue;
+      
+      const fieldValue = getNestedValue(item, field);
+      const result = evaluateRule(rule, fieldValue);
+      const isRuleValid = result === true;
+      
+      isValid = isValid && isRuleValid;
+      
+      validationResults.push({
+        field,
+        valid: isRuleValid,
+        errorMessage: isRuleValid ? undefined : (errorMessage || (typeof result === 'string' ? result : `Invalid value for ${field}`))
+      });
+    }
+    
+    if (addValidationFields) {
+      const enhancedItem = { ...item };
+      
+      enhancedItem.__valid = isValid;
+      enhancedItem.__validationResults = validationResults;
+      
+      validationResults.forEach(result => {
+        if (!result.valid) {
+          enhancedItem[`__error_${result.field}`] = result.errorMessage;
+        }
+      });
+      
+      return enhancedItem;
+    }
+    
+    return failOnError && !isValid ? null : item;
+  }).filter(item => item !== null);
+}
+
+// Helper function to validate with type check
+function validateWithTypeCheck(data: any[], typeCheck: string, addValidationFields: boolean, failOnError: boolean): any[] {
+  if (!typeCheck) return data;
+  
+  return data.map(item => {
+    try {
+      const checkFunction = new Function('item', `return ${typeCheck}`);
+      const isValid = checkFunction(item);
+      
+      if (addValidationFields) {
+        return {
+          ...item,
+          __valid: isValid,
+          __errorMessage: isValid ? undefined : 'Type check failed'
+        };
+      }
+      
+      return failOnError && !isValid ? null : item;
+    } catch (error) {
+      console.error('Error in type check:', error);
+      return failOnError ? null : item;
+    }
+  }).filter(item => item !== null);
+}
+
+// Helper function to validate with pattern
+function validateWithPattern(data: any[], field: string, pattern: string, flags: string, addValidationFields: boolean, failOnError: boolean): any[] {
+  if (!field || !pattern) return data;
+  
+  return data.map(item => {
+    try {
+      const fieldValue = getNestedValue(item, field);
+      
+      if (fieldValue === undefined) {
+        if (addValidationFields) {
+          return {
+            ...item,
+            __valid: false,
+            __errorMessage: `Field '${field}' not found`
+          };
+        }
+        
+        return failOnError ? null : item;
+      }
+      
+      const regex = new RegExp(pattern, flags);
+      const isValid = regex.test(String(fieldValue));
+      
+      if (addValidationFields) {
+        return {
+          ...item,
+          __valid: isValid,
+          __errorMessage: isValid ? undefined : `Pattern validation failed for '${field}'`
+        };
+      }
+      
+      return failOnError && !isValid ? null : item;
+    } catch (error) {
+      if (addValidationFields) {
+        return {
+          ...item,
+          __valid: false,
+          __errorMessage: `Error in pattern validation: ${error instanceof Error ? error.message : String(error)}`
+        };
+      }
+      
+      return failOnError ? null : item;
+    }
+  }).filter(item => item !== null);
+}
+
+// Helper function to validate with range
+function validateWithRange(data: any[], field: string, min: any, max: any, addValidationFields: boolean, failOnError: boolean): any[] {
+  if (!field) return data;
+  
+  return data.map(item => {
+    try {
+      const fieldValue = getNestedValue(item, field);
+      
+      if (fieldValue === undefined) {
+        if (addValidationFields) {
+          return {
+            ...item,
+            __valid: false,
+            __errorMessage: `Field '${field}' not found`
+          };
+        }
+        
+        return failOnError ? null : item;
+      }
+      
+      const numericValue = Number(fieldValue);
+      
+      if (isNaN(numericValue)) {
+        if (addValidationFields) {
+          return {
+            ...item,
+            __valid: false,
+            __errorMessage: `Value of '${field}' is not a number`
+          };
+        }
+        
+        return failOnError ? null : item;
+      }
+      
+      const minValue = min !== undefined ? Number(min) : undefined;
+      const maxValue = max !== undefined ? Number(max) : undefined;
+      
+      let isValid = true;
+      let errorMessage = '';
+      
+      if (minValue !== undefined && numericValue < minValue) {
+        isValid = false;
+        errorMessage = `Value of '${field}' is less than minimum (${minValue})`;
+      }
+      
+      if (maxValue !== undefined && numericValue > maxValue) {
+        isValid = false;
+        errorMessage = `Value of '${field}' is greater than maximum (${maxValue})`;
+      }
+      
+      if (addValidationFields) {
+        return {
+          ...item,
+          __valid: isValid,
+          __errorMessage: isValid ? undefined : errorMessage
+        };
+      }
+      
+      return failOnError && !isValid ? null : item;
+    } catch (error) {
+      if (addValidationFields) {
+        return {
+          ...item,
+          __valid: false,
+          __errorMessage: `Error in range validation: ${error instanceof Error ? error.message : String(error)}`
+        };
+      }
+      
+      return failOnError ? null : item;
+    }
+  }).filter(item => item !== null);
+}
+
+// Helper function to validate with custom validation
+function validateWithCustom(data: any[], transform: string, addValidationFields: boolean, failOnError: boolean): any[] {
+  if (!transform) return data;
+  
+  return data.map(item => {
+    try {
+      const validateFunction = new Function('item', `return ${transform}`);
+      const result = validateFunction(item);
+      
+      const isValid = result === true;
+      const errorMessage = typeof result === 'string' ? result : 'Validation failed';
+      
+      if (addValidationFields) {
+        return {
+          ...item,
+          __valid: isValid,
+          __errorMessage: isValid ? undefined : errorMessage
+        };
+      }
+      
+      return failOnError && !isValid ? null : item;
+    } catch (error) {
+      if (addValidationFields) {
+        return {
+          ...item,
+          __valid: false,
+          __errorMessage: `Error in custom validation: ${error instanceof Error ? error.message : String(error)}`
+        };
+      }
+      
+      return failOnError ? null : item;
+    }
+  }).filter(item => item !== null);
+}
+
+// Helper function to evaluate rule against a value
+function evaluateRule(rule: string, value: any): boolean | string {
+  try {
+    // Simple rule evaluation
+    if (rule === 'required') {
+      return value !== undefined && value !== null && value !== '' 
+        ? true 
+        : 'Field is required';
+    }
+    
+    // Numeric comparisons
+    if (rule.startsWith('>')) {
+      const compareValue = parseFloat(rule.substring(1));
+      return parseFloat(value) > compareValue 
+        ? true 
+        : `Value must be greater than ${compareValue}`;
+    }
+    
+    if (rule.startsWith('<')) {
+      const compareValue = parseFloat(rule.substring(1));
+      return parseFloat(value) < compareValue 
+        ? true 
+        : `Value must be less than ${compareValue}`;
+    }
+    
+    if (rule.startsWith('>=')) {
+      const compareValue = parseFloat(rule.substring(2));
+      return parseFloat(value) >= compareValue 
+        ? true 
+        : `Value must be greater than or equal to ${compareValue}`;
+    }
+    
+    if (rule.startsWith('<=')) {
+      const compareValue = parseFloat(rule.substring(2));
+      return parseFloat(value) <= compareValue 
+        ? true 
+        : `Value must be less than or equal to ${compareValue}`;
+    }
+    
+    if (rule.startsWith('=')) {
+      const compareValue = rule.substring(1);
+      return String(value) === compareValue 
+        ? true 
+        : `Value must be equal to ${compareValue}`;
+    }
+    
+    // Type validations
+    if (rule === 'isNumber') {
+      return !isNaN(parseFloat(value)) && isFinite(value) 
+        ? true 
+        : 'Value must be a number';
+    }
+    
+    if (rule === 'isInteger') {
+      return Number.isInteger(Number(value)) 
+        ? true 
+        : 'Value must be an integer';
+    }
+    
+    if (rule === 'isString') {
+      return typeof value === 'string' 
+        ? true 
+        : 'Value must be a string';
+    }
+    
+    if (rule === 'isBoolean') {
+      return typeof value === 'boolean' 
+        ? true 
+        : 'Value must be a boolean';
+    }
+    
+    if (rule === 'isArray') {
+      return Array.isArray(value) 
+        ? true 
+        : 'Value must be an array';
+    }
+    
+    if (rule === 'isObject') {
+      return typeof value === 'object' && value !== null && !Array.isArray(value) 
+        ? true 
+        : 'Value must be an object';
+    }
+    
+    // Format validations
+    if (rule === 'isEmail') {
+      const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+      return emailRegex.test(String(value)) 
+        ? true 
+        : 'Value must be a valid email address';
+    }
+    
+    if (rule === 'isURL') {
+      try {
+        new URL(String(value));
+        return true;
+      } catch {
+        return 'Value must be a valid URL';
+      }
+    }
+    
+    if (rule === 'isDate') {
+      const date = new Date(value);
+      return !isNaN(date.getTime()) 
+        ? true 
+        : 'Value must be a valid date';
+    }
+    
+    // Length validations
+    if (rule.startsWith('length=')) {
+      const length = parseInt(rule.substring(7));
+      return String(value).length === length 
+        ? true 
+        : `Value must be exactly ${length} characters long`;
+    }
+    
+    if (rule.startsWith('minLength=')) {
+      const minLength = parseInt(rule.substring(10));
+      return String(value).length >= minLength 
+        ? true 
+        : `Value must be at least ${minLength} characters long`;
+    }
+    
+    if (rule.startsWith('maxLength=')) {
+      const maxLength = parseInt(rule.substring(10));
+      return String(value).length <= maxLength 
+        ? true 
+        : `Value must be at most ${maxLength} characters long`;
+    }
+    
+    return `Unknown validation rule: ${rule}`;
+    
+  } catch (error) {
+    console.error('Error evaluating rule:', error);
+    return `Error validating: ${error instanceof Error ? error.message : String(error)}`;
+  }
+}
+
+// Helper function to validate required fields
+function validateWithRequired(data: any[], rules: any[], addValidationFields: boolean, failOnError: boolean): any[] {
+  if (!rules || !Array.isArray(rules) || rules.length === 0) return data;
+  
+  return data.map(item => {
+    const validationResults: {
+      field: string;
+      valid: boolean;
+      errorMessage?: string;
+    }[] = [];
+    
+    let isValid = true;
+    
+    for (const ruleConfig of rules) {
+      const { field, errorMessage } = ruleConfig;
+      
+      if (!field) continue;
+      
+      const fieldValue = getNestedValue(item, field);
+      const isFieldValid = fieldValue !== undefined && fieldValue !== null && fieldValue !== '';
+      
+      isValid = isValid && isFieldValid;
+      
+      validationResults.push({
+        field,
+        valid: isFieldValid,
+        errorMessage: isFieldValid ? undefined : (errorMessage || `${field} is required`)
+      });
+    }
+    
+    if (addValidationFields) {
+      const enhancedItem = { ...item };
+      
+      enhancedItem.__valid = isValid;
+      enhancedItem.__validationResults = validationResults;
+      
+      validationResults.forEach(result => {
+        if (!result.valid) {
+          enhancedItem[`__error_${result.field}`] = result.errorMessage;
+        }
+      });
+      
+      return enhancedItem;
+    }
+    
+    return failOnError && !isValid ? null : item;
+  }).filter(item => item !== null);
 }

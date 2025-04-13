@@ -230,43 +230,25 @@ const BlockEditor: React.FC = () => {
   };
 
   // Handle block deletion
-  const handleBlockDelete = (id: string) => {
-    setBlocks((prev) => {
-      // Find the index of the block to delete
-      const deleteIndex = prev.findIndex((b) => b.id === id);
-      if (deleteIndex === -1) return prev;
+  const handleBlockDelete = (blockId: string) => {
+    const newBlocks = blocks.filter((b) => b.id !== blockId);
+    setBlocks(newBlocks);
+  };
 
-      // Get the block to be deleted
-      const deletedBlock = prev[deleteIndex];
-      
-      // Create new blocks array without the deleted block
-      const newBlocks = prev.filter((b) => b.id !== id);
+  const handleBlockDuplicate = (block: Block) => {
+    const newBlock = {
+      ...block,
+      id: uuidv4(),
+      outputName: `${block.outputName}_copy`,
+    };
+    setBlocks([...blocks, newBlock]);
+  };
 
-      // Update input references for blocks after the deleted block
-      return newBlocks.map((block, index) => {
-        // If this block was after the deleted block
-        if (index >= deleteIndex) {
-          // Get available inputs from previous blocks
-          const availableInputs = [
-            "raw_data",
-            ...newBlocks
-              .slice(0, index)
-              .map((b) => b.outputName)
-              .filter(Boolean),
-          ];
-
-          // If current input is not available after deletion, set to previous block's output
-          if (!availableInputs.includes(block.input || "")) {
-            const previousBlockOutput = newBlocks[index - 1]?.outputName;
-            return {
-              ...block,
-              input: previousBlockOutput || "raw_data",
-            };
-          }
-        }
-        return block;
-      });
-    });
+  const handleBlockMove = (fromIndex: number, toIndex: number) => {
+    const newBlocks = [...blocks];
+    const [movedBlock] = newBlocks.splice(fromIndex, 1);
+    newBlocks.splice(toIndex, 0, movedBlock);
+    setBlocks(newBlocks);
   };
 
   // Handle file upload
@@ -367,19 +349,33 @@ const BlockEditor: React.FC = () => {
         .filter((name): name is string => name !== undefined),
     ];
 
+    const inputForCurrentBlock =
+      intermediateOutputs[block.input || "raw_data"];
+    const availableFields = extractAllFields(
+      inputForCurrentBlock || []
+    );
+
+    const inputData = getBlockInputData(block);
+    const blockOutput = getBlockOutput(block);
+    const context = getBlockContext(block);
+
     return (
       <SortableBlock
         key={block.id}
         block={block}
-        onChange={handleBlockChange}
-        onDelete={(b) => handleBlockDelete(b.id)}
+        onBlockChange={handleBlockChange}
+        onBlockDelete={(blockId) => handleBlockDelete(blockId)}
         allFields={allFields}
-        inputData={getBlockInputData(block)}
+        inputData={inputData}
         isDraggingThis={activeId === block.id}
         availableInputs={availableInputs}
         inputFileName={inputFileName}
-        blockOutput={getBlockOutput(block)}
-        context={getBlockContext(block)}
+        blockOutput={blockOutput}
+        context={context}
+        blocks={blocks}
+        index={index}
+        onBlockDuplicate={handleBlockDuplicate}
+        onBlockMove={handleBlockMove}
       />
     );
   };

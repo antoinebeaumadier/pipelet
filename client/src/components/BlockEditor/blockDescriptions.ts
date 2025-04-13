@@ -26,7 +26,8 @@ const BLOCK_DESCRIPTIONS: Record<string, string> = {
   length: "Returns the length of an array, string, or number of keys in an object.",
   min: "Finds the minimum value in a collection of data, supporting arrays, objects, and nested structures.",
   max: "Finds the maximum value in a collection of data, supporting arrays, objects, and nested structures.",
-  regex: "Tests text against a regular expression pattern, with optional flags for case sensitivity and other options."
+  regex: "Tests text against a regular expression pattern, with optional flags for case sensitivity and other options.",
+  validate: "Validates data against schemas or rules, returning validation results and highlighting issues."
 };
 
 export default BLOCK_DESCRIPTIONS; 

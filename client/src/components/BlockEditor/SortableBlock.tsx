@@ -30,6 +30,7 @@ import LengthBlock from "./blocks/LengthBlock";
 import MinBlock from "./blocks/MinBlock";
 import MaxBlock from "./blocks/MaxBlock";
 import RegexBlock from "./blocks/RegexBlock";
+import ValidateBlock from './blocks/ValidateBlock';
 import BLOCK_DESCRIPTIONS from "./blockDescriptions";
 
 // This would normally import all block type components
@@ -40,8 +41,8 @@ import BLOCK_DESCRIPTIONS from "./blockDescriptions";
 
 const SortableBlock: React.FC<SortableBlockProps> = ({
   block,
-  onChange,
-  onDelete,
+  onBlockChange,
+  onBlockDelete,
   allFields,
   inputData,
   isDraggingThis,
@@ -49,6 +50,7 @@ const SortableBlock: React.FC<SortableBlockProps> = ({
   inputFileName,
   blockOutput,
   context,
+  blocks,
 }) => {
   const {
     attributes,
@@ -141,7 +143,7 @@ const SortableBlock: React.FC<SortableBlockProps> = ({
       // Handle event-based changes
       if (e.target.type === "checkbox") {
         const target = e.target as HTMLInputElement;
-        onChange({
+        onBlockChange({
           ...block,
           config: {
             ...block.config,
@@ -149,18 +151,23 @@ const SortableBlock: React.FC<SortableBlockProps> = ({
           },
         });
       } else {
-        onChange({
+        const target = e.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+        onBlockChange({
           ...block,
           config: {
             ...block.config,
-            [e.target.name]: e.target.value,
+            [target.name]: target.value,
           },
         });
       }
     } else {
-      // Handle direct block updates (like from ConvertBlock)
-      onChange(e);
+      // Handle direct block updates
+      onBlockChange(e);
     }
+  };
+
+  const handleDelete = () => {
+    onBlockDelete(block.id);
   };
 
   const isDuplicateName =
@@ -195,6 +202,7 @@ const SortableBlock: React.FC<SortableBlockProps> = ({
             onChange={handleChange}
           />
         );
+
       case "sort":
         return (
           <SortBlock
@@ -204,6 +212,7 @@ const SortableBlock: React.FC<SortableBlockProps> = ({
             onChange={handleChange}
           />
         );
+
       case "merge":
         return (
           <MergeBlock
@@ -216,26 +225,30 @@ const SortableBlock: React.FC<SortableBlockProps> = ({
             mergeData={block.config.mergeWith ? (context?.[block.config.mergeWith] || null) : null}
           />
         );
+
       case "convert":
         return <ConvertBlock block={block} onChange={handleChange} />;
+
       case "format":
         return (
           <FormatBlock
             block={block}
-            onChange={handleChange}
             allFields={allFields}
             inputData={inputData}
+            onChange={handleChange}
           />
         );
+
       case "groupBy":
         return (
           <GroupByBlock
             block={block}
-            onChange={handleChange}
             allFields={allFields}
             inputData={inputData}
+            onChange={handleChange}
           />
         );
+
       case "flatten":
         return (
           <FlattenBlock
@@ -243,29 +256,17 @@ const SortableBlock: React.FC<SortableBlockProps> = ({
             onChange={handleChange}
           />
         );
-      case "mapKeys":
-        return (
-          <MapKeysBlock
-            block={block}
-            onChange={handleChange}
-          />
-        );
-      case "mapValues":
-        return (
-          <MapValuesBlock
-            block={block}
-            onChange={handleChange}
-          />
-        );
+
       case "get":
         return (
           <GetBlock
             block={block}
-            onChange={handleChange}
             allFields={allFields}
             inputData={inputData}
+            onChange={handleChange}
           />
         );
+
       case "reverse":
         return (
           <ReverseBlock
@@ -273,24 +274,43 @@ const SortableBlock: React.FC<SortableBlockProps> = ({
             onChange={handleChange}
           />
         );
+
       case "pick":
         return (
           <PickBlock
             block={block}
-            onChange={handleChange}
             allFields={allFields}
             inputData={inputData}
+            onChange={handleChange}
           />
         );
+
       case "mapObject":
         return (
           <MapObjectBlock
             block={block}
-            onChange={handleChange}
             allFields={allFields}
             inputData={inputData}
+            onChange={handleChange}
           />
         );
+
+      case "mapKeys":
+        return (
+          <MapKeysBlock
+            block={block}
+            onChange={handleChange}
+          />
+        );
+
+      case "mapValues":
+        return (
+          <MapValuesBlock
+            block={block}
+            onChange={handleChange}
+          />
+        );
+
       case "createObject":
         return (
           <CreateObjectBlock
@@ -298,6 +318,7 @@ const SortableBlock: React.FC<SortableBlockProps> = ({
             onChange={handleChange}
           />
         );
+
       case "createArray":
         return (
           <CreateArrayBlock
@@ -305,6 +326,7 @@ const SortableBlock: React.FC<SortableBlockProps> = ({
             onChange={handleChange}
           />
         );
+
       case "keyBy":
         return (
           <KeyByBlock
@@ -314,6 +336,7 @@ const SortableBlock: React.FC<SortableBlockProps> = ({
             onChange={handleChange}
           />
         );
+
       case "keys":
         return (
           <KeysBlock
@@ -323,6 +346,7 @@ const SortableBlock: React.FC<SortableBlockProps> = ({
             onChange={handleChange}
           />
         );
+
       case "values":
         return (
           <ValuesBlock
@@ -332,6 +356,7 @@ const SortableBlock: React.FC<SortableBlockProps> = ({
             onChange={handleChange}
           />
         );
+
       case "join":
         return (
           <JoinBlock
@@ -339,6 +364,7 @@ const SortableBlock: React.FC<SortableBlockProps> = ({
             onChange={handleChange}
           />
         );
+
       case "split":
         return (
           <SplitBlock
@@ -348,6 +374,7 @@ const SortableBlock: React.FC<SortableBlockProps> = ({
             inputData={inputData}
           />
         );
+
       case "unique":
         return (
           <UniqueBlock
@@ -357,6 +384,7 @@ const SortableBlock: React.FC<SortableBlockProps> = ({
             inputData={inputData}
           />
         );
+
       case "limit":
         return (
           <LimitBlock
@@ -366,6 +394,7 @@ const SortableBlock: React.FC<SortableBlockProps> = ({
             inputData={inputData}
           />
         );
+
       case "length":
         return (
           <LengthBlock
@@ -375,6 +404,7 @@ const SortableBlock: React.FC<SortableBlockProps> = ({
             inputData={inputData}
           />
         );
+
       case "min":
         return (
           <MinBlock
@@ -384,6 +414,7 @@ const SortableBlock: React.FC<SortableBlockProps> = ({
             inputData={inputData}
           />
         );
+
       case "max":
         return (
           <MaxBlock
@@ -393,8 +424,18 @@ const SortableBlock: React.FC<SortableBlockProps> = ({
             inputData={inputData}
           />
         );
+
       case "regex":
         return <RegexBlock block={block} onChange={handleChange} allFields={allFields} inputData={inputData} />;
+      case "validate":
+        return <ValidateBlock 
+          block={block} 
+          onChange={handleChange} 
+          allFields={allFields} 
+          context={context}
+          inputFileName={inputFileName || undefined}
+          blocks={blocks}
+        />;
       default:
         return <div>Unknown block type: {block.type}</div>;
     }
@@ -424,7 +465,7 @@ const SortableBlock: React.FC<SortableBlockProps> = ({
           <input
             type="text"
             value={block.outputName || ""}
-            onChange={(e) => onChange({ ...block, outputName: e.target.value })}
+            onChange={(e) => onBlockChange({ ...block, outputName: e.target.value })}
             placeholder="ex: step1"
             style={{
               border: "1px solid",
@@ -442,7 +483,7 @@ const SortableBlock: React.FC<SortableBlockProps> = ({
             <label style={{ minWidth: "20px", fontSize: "12px" }}>Input:</label>
             <select
               value={block.input || ""}
-              onChange={(e) => onChange({ ...block, input: e.target.value })}
+              onChange={(e) => onBlockChange({ ...block, input: e.target.value })}
               style={{
                 border: "1px solid #ccc",
                 minWidth: "120px",
@@ -507,7 +548,7 @@ const SortableBlock: React.FC<SortableBlockProps> = ({
         <button
           onClick={(e) => {
             e.stopPropagation();
-            onChange({ ...block, enabled: !block.enabled });
+            onBlockChange({ ...block, enabled: !block.enabled });
           }}
           style={{
             backgroundColor: block.enabled ? "#f3f4f6" : "#ef4444",
@@ -530,7 +571,7 @@ const SortableBlock: React.FC<SortableBlockProps> = ({
         <button
           onClick={(e) => {
             e.stopPropagation();
-            onDelete(block);
+            handleDelete();
           }}
           style={{
             background: "transparent",

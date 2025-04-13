@@ -1,5 +1,5 @@
 // Define block types
-export const BLOCK_TYPES = ["filter", "map", "convert", "sort", "merge", "format", "groupBy", "flatten", "get", "reverse", "pick", "mapObject", "mapKeys", "mapValues", "createObject", "createArray", "keyBy", "keys", "values", "join", "split", "unique", "limit", "length", "min", "max", "regex", "csv"] as const;
+export const BLOCK_TYPES = ["filter", "map", "convert", "sort", "merge", "format", "groupBy", "flatten", "get", "reverse", "pick", "mapObject", "mapKeys", "mapValues", "createObject", "createArray", "keyBy", "keys", "values", "join", "split", "unique", "limit", "length", "min", "max", "regex", "validate"] as const;
 export type BlockType = (typeof BLOCK_TYPES)[number];
 
 export interface ObjectTemplateItem {
@@ -73,8 +73,10 @@ export interface BlockConfig {
   size?: boolean;
   // Min block specific config
   minRecursive?: boolean;
+  min?: number | string;
   // Max block specific config
   maxRecursive?: boolean;
+  max?: number | string;
   // Regex block specific config
   pattern?: string;
   flags?: string;
@@ -85,6 +87,16 @@ export interface BlockConfig {
   indentation?: string;
   namespaceHandling?: "preserve" | "strip" | "prefix";
   encoding?: string;
+  // Validate block specific config
+  validationType?: "schema" | "rule" | "type" | "required" | "pattern" | "range" | "custom";
+  schema?: string;
+  rules?: {
+    field: string;
+    rule: string;
+    errorMessage?: string;
+  }[];
+  failOnError?: boolean;
+  addValidationFields?: boolean;
 }
 
 // Block structure
@@ -123,8 +135,8 @@ export interface InputBlockProps {
 
 export interface SortableBlockProps {
   block: Block;
-  onChange: (block: Block) => void;
-  onDelete: (block: Block) => void;
+  onBlockChange: (block: Block) => void;
+  onBlockDelete: (blockId: string) => void;
   allFields: string[];
   inputData: any[] | null;
   isDraggingThis: boolean;
@@ -132,4 +144,8 @@ export interface SortableBlockProps {
   inputFileName: string | null;
   blockOutput: any[] | null;
   context?: Record<string, any[]>;
+  blocks: Block[];
+  index: number;
+  onBlockDuplicate?: (block: Block) => void;
+  onBlockMove?: (fromIndex: number, toIndex: number) => void;
 }
