@@ -395,7 +395,7 @@ const BlockEditor: React.FC = () => {
           height: "120px"
         }}
       >
-        <h1>🧱 Pipeline Editor</h1>
+        <h1>🔧 Format Editor</h1>
 
         <div>
           <label>
