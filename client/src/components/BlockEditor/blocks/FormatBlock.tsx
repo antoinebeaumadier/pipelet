@@ -153,7 +153,7 @@ const FormatBlock: React.FC<FormatBlockProps> = ({ block, onChange }) => {
           Use {'{'}field{'}'} to reference fields from the current item. Example: {'{'}name{'}'} {'->'} "John"
         </div>
         <div style={{ marginTop: "4px" }}>
-          Reference syntax: (1) "$input.field" maps field across all input items, (2) "$input[0].field" accesses a specific item, (3) "$stepName.field" or "$stepName[index].field" for other steps.
+          Reference syntax: (0) {'{'}field{'}'} to access a field from the current block's input item, (1) "$input.field" to access a field across the file items (first step), (2) "$input[0].field" to access a specific file item, (3) "$stepName.field" or "$stepName[index].field" for other steps.
         </div>
       </div>
     </div>

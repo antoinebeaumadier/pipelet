@@ -35,7 +35,7 @@ export interface BlockConfig {
   groupBy?: string;
   aggregateFields?: {
     field: string;
-    operation: "sum" | "average" | "count" | "min" | "max";
+    operation: "sum" | "average" | "count" | "min" | "max" | "product";
     newField: string;
   }[];
   condition?: string;

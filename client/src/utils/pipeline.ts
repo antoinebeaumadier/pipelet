@@ -60,7 +60,7 @@ export function applyBlockLogic(
   try {
     switch (block.type) {
       case "filter": {
-        return applyFilterBlock(data, block);
+        return applyFilterBlock(data, block, context);
       }
       case "map": {
         return applyMapBlock(data, block);
@@ -150,13 +150,19 @@ export function applyBlockLogic(
 /**
  * Filter block implementation
  */
-function applyFilterBlock(data: any[], block: Block): any[] {
+function applyFilterBlock(data: any[], block: Block, context?: Record<string, any[]>): any[] {
   const { field, operator, value } = block.config;
   if (!field || !operator || value === undefined) return data;
   
+  // Create context for evaluation if not provided
+  const evalContext = context || { input: data };
+  
+  // Evaluate the value if it contains references
+  const evaluatedValue = evaluateStepReference(value, evalContext);
+  
   return data.filter((item) => {
     const itemVal = getNestedValue(item, field);
-    const parsedVal = isNaN(Number(value)) ? value : Number(value);
+    const parsedVal = isNaN(Number(evaluatedValue)) ? evaluatedValue : Number(evaluatedValue);
     const parsedItemVal =
       typeof itemVal === "string" && !isNaN(Number(itemVal))
         ? Number(itemVal)
@@ -167,7 +173,7 @@ function applyFilterBlock(data: any[], block: Block): any[] {
         return parsedItemVal > parsedVal;
       case "<":
         return parsedItemVal < parsedVal;
-      case "==":
+      case "=":
         return parsedItemVal === parsedVal;
       case "!=":
         return parsedItemVal !== parsedVal;
@@ -175,6 +181,10 @@ function applyFilterBlock(data: any[], block: Block): any[] {
         return parsedItemVal >= parsedVal;
       case "<=":
         return parsedItemVal <= parsedVal;
+      case "contains":
+        return String(itemVal).includes(String(parsedVal));
+      case "not_contains":
+        return !String(itemVal).includes(String(parsedVal));
       default:
         return true;
     }
@@ -553,7 +563,38 @@ function applyGroupByBlock(data: any[], block: Block): any[] {
   const { groupBy, aggregateFields } = block.config;
   
   if (!groupBy) {
-    return data;
+    // If no groupBy is specified (root object), treat the entire array as one group
+    const groupResult: Record<string, any> = {};
+    
+    if (aggregateFields) {
+      aggregateFields.forEach(({ field, operation, newField }) => {
+        const values = data.map(item => getNestedValue(item, field));
+        
+        switch (operation) {
+          case 'sum':
+            groupResult[newField] = values.reduce((sum: number, val: any) => sum + (Number(val) || 0), 0);
+            break;
+          case 'average':
+            const sum = values.reduce((sum: number, val: any) => sum + (Number(val) || 0), 0);
+            groupResult[newField] = sum / values.length;
+            break;
+          case 'count':
+            groupResult[newField] = values.length;
+            break;
+          case 'min':
+            groupResult[newField] = Math.min(...values.map((val: any) => Number(val) || Infinity));
+            break;
+          case 'max':
+            groupResult[newField] = Math.max(...values.map((val: any) => Number(val) || -Infinity));
+            break;
+          case 'product':
+            groupResult[newField] = values.reduce((product: number, val: any) => product * (Number(val) || 1), 1);
+            break;
+        }
+      });
+    }
+    
+    return [groupResult];
   }
 
   // Create a map to store grouped data
@@ -598,6 +639,9 @@ function applyGroupByBlock(data: any[], block: Block): any[] {
           break;
         case 'max':
           groupResult[newField] = Math.max(...values.map((val: any) => Number(val) || -Infinity));
+          break;
+        case 'product':
+          groupResult[newField] = values.reduce((product: number, val: any) => product * (Number(val) || 1), 1);
           break;
       }
     });

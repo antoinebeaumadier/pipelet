@@ -105,7 +105,7 @@ const GroupByBlock: React.FC<GroupByBlockProps> = ({ block, onChange, allFields,
             fontSize: "12px",
           }}
         >
-          <option value="">Select field</option>
+          <option value="">Root object</option>
           {fieldSuggestions.map((field) => (
             <option key={field} value={field}>
               {field}
@@ -198,6 +198,7 @@ const GroupByBlock: React.FC<GroupByBlockProps> = ({ block, onChange, allFields,
               <option value="count">Count</option>
               <option value="min">Min</option>
               <option value="max">Max</option>
+              <option value="product">Product</option>
             </select>
             <input
               type="text"
