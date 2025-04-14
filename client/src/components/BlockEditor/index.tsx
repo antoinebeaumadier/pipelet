@@ -28,13 +28,14 @@ import { applyPipeline } from "../../utils/pipeline";
 const BlockEditor: React.FC = () => {
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [inputData, setInputData] = useState<any[]>([]);
-  const [outputData, setOutputData] = useState<any>(null);
+  const [outputData, setOutputData] = useState<any[]>([]);
   const [allFields, setAllFields] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [inputFileName, setInputFileName] = useState<string | null>(null);
   const [copyButtonText, setCopyButtonText] = useState<string>("📋 Copy");
+  const [shareButtonText, setShareButtonText] = useState("🔗 Share Pipeline");
 
   // Set up the global styles
   useEffect(() => {
@@ -380,8 +381,53 @@ const BlockEditor: React.FC = () => {
     );
   };
 
+  // Function to generate shareable link
+  const generateShareLink = () => {
+    const pipelineConfig = {
+      blocks: blocks.map(block => ({
+        type: block.type,
+        config: block.config,
+        outputName: block.outputName,
+        input: block.input,
+        enabled: block.enabled
+      }))
+    };
+    
+    const encodedConfig = encodeURIComponent(JSON.stringify(pipelineConfig));
+    const baseUrl = window.location.origin + window.location.pathname;
+    return `${baseUrl}?pipeline=${encodedConfig}`;
+  };
+
+  // Function to handle sharing
+  const handleShare = () => {
+    const shareLink = generateShareLink();
+    navigator.clipboard.writeText(shareLink);
+    setShareButtonText("✅ Copied!");
+    setTimeout(() => setShareButtonText("🔗 Share Pipeline"), 2000);
+  };
+
+  // Load pipeline from URL parameters on component mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const pipelineParam = params.get('pipeline');
+    
+    if (pipelineParam) {
+      try {
+        const pipelineConfig = JSON.parse(decodeURIComponent(pipelineParam));
+        if (pipelineConfig.blocks) {
+          setBlocks(pipelineConfig.blocks.map((block: any) => ({
+            ...block,
+            id: uuidv4() // Generate new IDs for the blocks
+          })));
+        }
+      } catch (error) {
+        console.error('Error loading pipeline from URL:', error);
+      }
+    }
+  }, []);
+
   return (
-    <div>
+    <div style={{ padding: "0px 0px 0px 0px" }}>
       {/* Fixed header panel */}
       <div
         style={{
@@ -390,12 +436,35 @@ const BlockEditor: React.FC = () => {
           zIndex: 10,
           backgroundColor: "white",
           borderBottom: "1px solid #e5e7eb",
-          margin: "-8px 0px 8px 0px",
-          padding: "0px 0px 8px 0px",
-          height: "120px"
+          margin: "-24px 0px 4px 0px",
+          padding: "8px 0px 4px 0px",
+          height: "108px"
         }}
       >
-        <h1>🔧 Format Editor</h1>
+        <div style={{ 
+          display: "flex", 
+          justifyContent: "space-between", 
+          alignItems: "center",
+          marginBottom: "0px"
+        }}>
+          <h1 style={{ margin: 0 }}>🔧 Format Editor</h1>
+          <button
+            onClick={handleShare}
+            style={{
+              padding: "4px 8px",
+              backgroundColor: "#f0f0f0",
+              border: "1px solid #ddd",
+              borderRadius: "4px",
+              cursor: "pointer",
+              fontSize: "12px",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px"
+            }}
+          >
+            {shareButtonText}
+          </button>
+        </div>
 
         <div>
           <label>
@@ -427,6 +496,7 @@ const BlockEditor: React.FC = () => {
               maxHeight: "calc(97vh - 195px)",
               overflowY: "auto",
               paddingRight: "8px",
+              paddingTop: "8px",
             }}
           >
             {/* Input data */}
@@ -521,7 +591,8 @@ const BlockEditor: React.FC = () => {
               height: "calc(97vh - 210px)", /* Fixed height */
               display: "flex",
               flexDirection: "column",
-              overflow: "hidden", /* Prevent internal scrolling */
+              overflow: "hidden", 
+              marginTop: "8px"/* Prevent internal scrolling */
             }}
           >
             <h2 style={{ fontWeight: "bold", marginBottom: "16px" }}>
